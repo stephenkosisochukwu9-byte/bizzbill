@@ -32,13 +32,33 @@ export default function ReceiptPage() {
   const [items, setItems] = useState<Item[]>([
     {
       name: "",
-      quantity: 1,
+      quantity: 0,
       unitPrice: 0,
     },
   ]);
 
   /* =========================
-     ITEM FUNCTIONS
+     ITEM TOTAL
+  ========================= */
+
+  const itemTotal = (item: Item) => {
+    return (
+      Number(item.quantity || 0) *
+      Number(item.unitPrice || 0)
+    );
+  };
+
+  /* =========================
+     TOTAL AMOUNT
+  ========================= */
+
+  const totalAmount = items.reduce(
+    (total, item) => total + itemTotal(item),
+    0
+  );
+
+  /* =========================
+     UPDATE ITEM
   ========================= */
 
   const updateItem = (
@@ -58,16 +78,24 @@ export default function ReceiptPage() {
     );
   };
 
+  /* =========================
+     ADD ITEM
+  ========================= */
+
   const addItem = () => {
     setItems((current) => [
       ...current,
       {
         name: "",
-        quantity: 1,
+        quantity: 0,
         unitPrice: 0,
       },
     ]);
   };
+
+  /* =========================
+     REMOVE ITEM
+  ========================= */
 
   const removeItem = (index: number) => {
     if (items.length === 1) return;
@@ -76,15 +104,6 @@ export default function ReceiptPage() {
       current.filter((_, i) => i !== index)
     );
   };
-
-  const itemTotal = (item: Item) =>
-    Number(item.quantity || 0) *
-    Number(item.unitPrice || 0);
-
-  const totalAmount = items.reduce(
-    (total, item) => total + itemTotal(item),
-    0
-  );
 
   /* =========================
      GENERATE RECEIPT
@@ -111,15 +130,19 @@ export default function ReceiptPage() {
       return;
     }
 
-    const hasItem = items.some(
-      (item) => item.name.trim() !== ""
+    const validItems = items.filter(
+      (item) =>
+        item.name.trim() !== "" &&
+        Number(item.quantity) > 0 &&
+        Number(item.unitPrice) >= 0
     );
 
-    if (!hasItem) {
-      alert("Please add at least one item.");
+    if (validItems.length === 0) {
+      alert("Please add at least one valid item.");
       return;
     }
 
+    setItems(validItems);
     setGenerated(true);
 
     setTimeout(() => {
@@ -131,7 +154,7 @@ export default function ReceiptPage() {
   };
 
   /* =========================
-     SAVE AS PNG
+     SAVE RECEIPT AS PNG
   ========================= */
 
   const saveAsImage = async () => {
@@ -163,22 +186,22 @@ export default function ReceiptPage() {
     }
   };
 
-  /* =========================
+  /* =====================================================
      GENERATED RECEIPT
-  ========================= */
+  ===================================================== */
 
   if (generated) {
     return (
       <>
         <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-8 print:bg-white print:p-0">
 
-          {/* TOP ACTIONS */}
+          {/* TOP BUTTONS */}
 
-          <div className="mx-auto mb-4 flex w-[calc(100%-8px)] max-w-2xl items-center justify-between gap-3 print:hidden">
+          <div className="mx-auto mb-4 flex w-full max-w-2xl items-center justify-between gap-3 print:hidden">
 
             <Link
               href="/"
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-900 shadow-sm transition hover:bg-gray-50 sm:px-4"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-950 shadow-sm hover:bg-gray-50 sm:px-4"
             >
               ← Home
             </Link>
@@ -186,7 +209,7 @@ export default function ReceiptPage() {
             <button
               type="button"
               onClick={() => setGenerated(false)}
-              className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-50 sm:px-4"
+              className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50 sm:px-4"
             >
               Edit Receipt
             </button>
@@ -199,7 +222,7 @@ export default function ReceiptPage() {
             ref={receiptRef}
             className="
               mx-auto
-              w-[calc(100%-8px)]
+              w-full
               max-w-2xl
               overflow-hidden
               rounded-xl
@@ -214,12 +237,14 @@ export default function ReceiptPage() {
           >
 
             {/* =========================
-                HEADER
+                RECEIPT HEADER
             ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
+                {/* BUSINESS */}
 
                 <div className="min-w-0">
 
@@ -233,6 +258,8 @@ export default function ReceiptPage() {
 
                 </div>
 
+                {/* RECEIPT INFO */}
+
                 <div className="sm:text-right">
 
                   <h2 className="text-2xl font-extrabold text-gray-950 sm:text-3xl">
@@ -243,14 +270,14 @@ export default function ReceiptPage() {
 
                     <p>
                       Receipt No:{" "}
-                      <span className="font-bold text-gray-950">
+                      <span className="font-extrabold text-gray-950">
                         {receiptNumber}
                       </span>
                     </p>
 
                     <p>
                       Date:{" "}
-                      <span className="font-bold text-gray-950">
+                      <span className="font-extrabold text-gray-950">
                         {receiptDate}
                       </span>
                     </p>
@@ -301,7 +328,7 @@ export default function ReceiptPage() {
 
             <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
 
-              {/* DESKTOP TABLE */}
+              {/* DESKTOP */}
 
               <div className="hidden sm:block">
 
@@ -311,19 +338,19 @@ export default function ReceiptPage() {
 
                     <tr className="border-b-2 border-gray-300">
 
-                      <th className="w-[40%] pb-3 text-left text-sm font-extrabold text-gray-900">
+                      <th className="w-[40%] pb-3 text-left text-sm font-extrabold text-gray-950">
                         Item / Service
                       </th>
 
-                      <th className="w-[15%] pb-3 text-center text-sm font-extrabold text-gray-900">
+                      <th className="w-[15%] pb-3 text-center text-sm font-extrabold text-gray-950">
                         Qty
                       </th>
 
-                      <th className="w-[22%] pb-3 text-right text-sm font-extrabold text-gray-900">
+                      <th className="w-[22%] pb-3 text-right text-sm font-extrabold text-gray-950">
                         Unit Price
                       </th>
 
-                      <th className="w-[23%] pb-3 text-right text-sm font-extrabold text-gray-900">
+                      <th className="w-[23%] pb-3 text-right text-sm font-extrabold text-gray-950">
                         Total
                       </th>
 
@@ -341,7 +368,7 @@ export default function ReceiptPage() {
                       >
 
                         <td className="break-words py-3 pr-2 text-left text-sm font-bold text-gray-950">
-                          {item.name || "Item / Service"}
+                          {item.name}
                         </td>
 
                         <td className="py-3 text-center text-sm font-bold text-gray-950">
@@ -351,7 +378,7 @@ export default function ReceiptPage() {
                         <td className="py-3 text-right text-sm font-bold text-gray-950">
                           ₦
                           {Number(
-                            item.unitPrice || 0
+                            item.unitPrice
                           ).toLocaleString("en-NG")}
                         </td>
 
@@ -372,25 +399,25 @@ export default function ReceiptPage() {
 
               </div>
 
-              {/* MOBILE ITEMS */}
+              {/* MOBILE */}
 
               <div className="space-y-3 sm:hidden">
 
-                <div className="grid grid-cols-[1fr_55px_95px_95px] gap-2 border-b-2 border-gray-300 pb-3">
+                <div className="grid grid-cols-[1fr_45px_85px_85px] gap-2 border-b-2 border-gray-300 pb-3">
 
-                  <p className="text-xs font-extrabold text-gray-900">
+                  <p className="text-xs font-extrabold text-gray-950">
                     Item / Service
                   </p>
 
-                  <p className="text-center text-xs font-extrabold text-gray-900">
+                  <p className="text-center text-xs font-extrabold text-gray-950">
                     Qty
                   </p>
 
-                  <p className="text-right text-xs font-extrabold text-gray-900">
+                  <p className="text-right text-xs font-extrabold text-gray-950">
                     Unit Price
                   </p>
 
-                  <p className="text-right text-xs font-extrabold text-gray-900">
+                  <p className="text-right text-xs font-extrabold text-gray-950">
                     Total
                   </p>
 
@@ -400,11 +427,11 @@ export default function ReceiptPage() {
 
                   <div
                     key={index}
-                    className="grid grid-cols-[1fr_55px_95px_95px] items-center gap-2 border-b border-gray-100 py-3 last:border-b-0"
+                    className="grid grid-cols-[1fr_45px_85px_85px] items-center gap-2 border-b border-gray-100 py-3 last:border-b-0"
                   >
 
                     <p className="min-w-0 break-words text-xs font-bold text-gray-950">
-                      {item.name || "Item / Service"}
+                      {item.name}
                     </p>
 
                     <p className="text-center text-xs font-bold text-gray-950">
@@ -414,7 +441,7 @@ export default function ReceiptPage() {
                     <p className="text-right text-xs font-bold text-gray-950">
                       ₦
                       {Number(
-                        item.unitPrice || 0
+                        item.unitPrice
                       ).toLocaleString("en-NG")}
                     </p>
 
@@ -434,16 +461,16 @@ export default function ReceiptPage() {
             </div>
 
             {/* =========================
-                TOTALS
+                TOTAL
             ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
 
-              <div className="ml-auto w-full max-w-sm space-y-3">
+              <div className="ml-auto w-full max-w-sm">
 
                 <div className="flex items-center justify-between gap-4">
 
-                  <span className="text-sm font-bold text-gray-700 sm:text-base">
+                  <span className="text-sm font-extrabold text-gray-700 sm:text-base">
                     Total Amount
                   </span>
 
@@ -456,9 +483,9 @@ export default function ReceiptPage() {
 
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
+                <div className="mt-3 flex items-center justify-between gap-4">
 
-                  <span className="text-sm font-bold text-gray-700 sm:text-base">
+                  <span className="text-sm font-extrabold text-gray-700 sm:text-base">
                     Amount Paid
                   </span>
 
@@ -471,7 +498,7 @@ export default function ReceiptPage() {
 
                 </div>
 
-                <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-3">
+                <div className="mt-3 flex items-center justify-between gap-4 border-t border-gray-200 pt-3">
 
                   <span className="text-sm font-extrabold text-gray-700 sm:text-base">
                     Balance Due
@@ -494,7 +521,7 @@ export default function ReceiptPage() {
             <div className="px-5 py-4 text-center sm:px-7 sm:py-5">
 
               <p className="text-base font-extrabold text-gray-950 sm:text-lg">
-                Thanks for your patronage.
+                Thank you for your business.
               </p>
 
               <p className="mt-1 text-xs font-semibold text-gray-600 sm:text-sm">
@@ -509,12 +536,12 @@ export default function ReceiptPage() {
               ACTION BUTTONS
           ========================= */}
 
-          <div className="mx-auto mt-4 grid w-[calc(100%-8px)] max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2 print:hidden">
+          <div className="mx-auto mt-4 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2 print:hidden">
 
             <button
               type="button"
               onClick={saveAsImage}
-              className="rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 sm:text-base"
+              className="rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700 sm:text-base"
             >
               🖼 Save Receipt as PNG
             </button>
@@ -522,7 +549,7 @@ export default function ReceiptPage() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-gray-950 sm:text-base"
+              className="rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm hover:bg-gray-950 sm:text-base"
             >
               🖨 Print Receipt
             </button>
@@ -531,7 +558,7 @@ export default function ReceiptPage() {
 
         </main>
 
-        {/* PRINT STYLES */}
+        {/* PRINT CSS */}
 
         <style jsx global>{`
           @media print {
@@ -544,7 +571,7 @@ export default function ReceiptPage() {
             body {
               margin: 0 !important;
               padding: 0 !important;
-              background: white !important;
+              background: #ffffff !important;
             }
 
             body {
@@ -557,9 +584,9 @@ export default function ReceiptPage() {
     );
   }
 
-  /* =========================
+  /* =====================================================
      RECEIPT FORM
-  ========================= */
+  ===================================================== */
 
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
@@ -572,7 +599,7 @@ export default function ReceiptPage() {
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-sm hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-950 shadow-sm hover:bg-gray-50"
           >
             ← Home
           </Link>
@@ -591,11 +618,11 @@ export default function ReceiptPage() {
             Receipt Details
           </h2>
 
-          {/* BUSINESS */}
+          {/* BUSINESS NAME */}
 
           <div className="mb-5">
 
-            <label className="mb-2 block text-sm font-extrabold text-gray-900">
+            <label className="mb-2 block text-sm font-extrabold text-gray-950">
               Business name
             </label>
 
@@ -617,7 +644,7 @@ export default function ReceiptPage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              <label className="mb-2 block text-sm font-extrabold text-gray-950">
                 Customer name
               </label>
 
@@ -635,7 +662,7 @@ export default function ReceiptPage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              <label className="mb-2 block text-sm font-extrabold text-gray-950">
                 Receipt number
               </label>
 
@@ -653,7 +680,7 @@ export default function ReceiptPage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              <label className="mb-2 block text-sm font-extrabold text-gray-950">
                 Receipt date
               </label>
 
@@ -705,7 +732,7 @@ export default function ReceiptPage() {
 
                     <div>
 
-                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                      <label className="mb-2 block text-sm font-extrabold text-gray-950">
                         Item / Service
                       </label>
 
@@ -729,7 +756,7 @@ export default function ReceiptPage() {
 
                     <div>
 
-                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                      <label className="mb-2 block text-sm font-extrabold text-gray-950">
                         Quantity
                       </label>
 
@@ -742,6 +769,7 @@ export default function ReceiptPage() {
                             : item.quantity
                         }
                         onChange={(e) => {
+
                           const value =
                             e.target.value;
 
@@ -752,6 +780,7 @@ export default function ReceiptPage() {
                               ? 0
                               : Number(value)
                           );
+
                         }}
                         placeholder="Enter quantity"
                         className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
@@ -763,7 +792,7 @@ export default function ReceiptPage() {
 
                     <div>
 
-                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                      <label className="mb-2 block text-sm font-extrabold text-gray-950">
                         Unit price
                       </label>
 
@@ -776,6 +805,7 @@ export default function ReceiptPage() {
                             : item.unitPrice
                         }
                         onChange={(e) => {
+
                           const value =
                             e.target.value;
 
@@ -786,6 +816,7 @@ export default function ReceiptPage() {
                               ? 0
                               : Number(value)
                           );
+
                         }}
                         placeholder="₦0"
                         className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
@@ -795,11 +826,11 @@ export default function ReceiptPage() {
 
                   </div>
 
-                  {/* ITEM TOTAL */}
+                  {/* ITEM TOTAL + REMOVE */}
 
                   <div className="mt-4 flex items-center justify-between gap-3">
 
-                    <p className="text-sm font-extrabold text-gray-900 sm:text-base">
+                    <p className="text-sm font-extrabold text-gray-950 sm:text-base">
                       Item total: ₦
                       {itemTotal(item).toLocaleString(
                         "en-NG"
@@ -836,7 +867,7 @@ export default function ReceiptPage() {
 
             <div className="flex items-center justify-between gap-4">
 
-              <span className="text-base font-extrabold text-gray-900">
+              <span className="text-base font-extrabold text-gray-950">
                 Total Amount
               </span>
 
@@ -855,7 +886,7 @@ export default function ReceiptPage() {
 
           <div className="mt-8">
 
-            <label className="mb-2 block text-sm font-extrabold text-gray-900">
+            <label className="mb-2 block text-sm font-extrabold text-gray-950">
               Payment method
             </label>
 
@@ -894,7 +925,7 @@ export default function ReceiptPage() {
           <button
             type="button"
             onClick={generateReceipt}
-            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm transition hover:bg-blue-700"
+            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm hover:bg-blue-700"
           >
             Generate Receipt
           </button>
