@@ -1,61 +1,96 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toPng } from "html-to-image";
+import Link from "next/link";
 
 type Item = {
-  id: number;
   name: string;
   quantity: number;
   unitPrice: number;
 };
 
-type InvoiceData = {
-  customerName: string;
-  customerPhone: string;
-  invoiceNumber: string;
-  invoiceDate: string;
-  items: Item[];
-  amountPaid: number;
-  paymentStatus: "Paid" | "Partially Paid" | "Unpaid";
-};
+type PaymentStatus =
+  | "Unpaid"
+  | "Paid"
+  | "Partially Paid";
 
 export default function InvoicePage() {
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const [generated, setGenerated] = useState(false);
+
+  // -----------------------------
+  // CUSTOMER / INVOICE DETAILS
+  // -----------------------------
+
+  const [customerName, setCustomerName] =
+    useState("");
+
+  const [customerPhone, setCustomerPhone] =
+    useState("");
+
+  const [invoiceNumber, setInvoiceNumber] =
+    useState("");
+
+  const [invoiceDate, setInvoiceDate] =
+    useState("");
+
+
+  // -----------------------------
+  // PAYMENT
+  // -----------------------------
+
+  const [paymentStatus, setPaymentStatus] =
+    useState<PaymentStatus>("Unpaid");
+
+  const [amountPaid, setAmountPaid] =
+    useState<number>(0);
+
+
+  // -----------------------------
+  // ITEMS
+  // -----------------------------
 
   const [items, setItems] = useState<Item[]>([
     {
-      id: 1,
       name: "",
       quantity: 1,
       unitPrice: 0,
     },
   ]);
 
-  const [amountPaid, setAmountPaid] = useState(0);
 
-  const [paymentStatus, setPaymentStatus] = useState<
-    "Paid" | "Partially Paid" | "Unpaid"
-  >("Unpaid");
+  // -----------------------------
+  // UPDATE ITEM
+  // -----------------------------
 
-  const [generated, setGenerated] = useState(false);
+  const updateItem = (
+    index: number,
+    field: keyof Item,
+    value: string | number
+  ) => {
+    setItems((current) =>
+      current.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item
+      )
+    );
+  };
 
-  const [invoiceData, setInvoiceData] =
-    useState<InvoiceData | null>(null);
 
-  // =========================
-  // ITEM FUNCTIONS
-  // =========================
+  // -----------------------------
+  // ADD ITEM
+  // -----------------------------
 
   const addItem = () => {
     setItems((current) => [
       ...current,
       {
-        id: Date.now(),
         name: "",
         quantity: 1,
         unitPrice: 0,
@@ -63,67 +98,65 @@ export default function InvoicePage() {
     ]);
   };
 
-  const removeItem = (id: number) => {
-    if (items.length === 1) return;
+
+  // -----------------------------
+  // REMOVE ITEM
+  // -----------------------------
+
+  const removeItem = (index: number) => {
+    if (items.length === 1) {
+      return;
+    }
 
     setItems((current) =>
-      current.filter((item) => item.id !== id)
+      current.filter((_, i) => i !== index)
     );
   };
 
-  const updateItem = (
-    id: number,
-    field: keyof Item,
-    value: string | number
-  ) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              [field]:
-                field === "quantity" ||
-                field === "unitPrice"
-                  ? Number(value)
-                  : value,
-            }
-          : item
-      )
+
+  // -----------------------------
+  // ITEM TOTAL
+  // -----------------------------
+
+  const itemTotal = (item: Item) => {
+    return (
+      Number(item.quantity || 0) *
+      Number(item.unitPrice || 0)
     );
   };
 
-  // =========================
-  // CALCULATIONS
-  // =========================
 
-  const getItemTotal = (item: Item) => {
-    return item.quantity * item.unitPrice;
-  };
+  // -----------------------------
+  // GRAND TOTAL
+  // -----------------------------
 
-  const subtotal = items.reduce(
-    (total, item) => total + getItemTotal(item),
+  const grandTotal = items.reduce(
+    (total, item) =>
+      total + itemTotal(item),
     0
   );
 
-  const grandTotal = subtotal;
 
-  const balanceDue = Math.max(
-    grandTotal - amountPaid,
-    0
-  );
+  // -----------------------------
+  // BALANCE DUE
+  // -----------------------------
 
-  // =========================
+  const balanceDue =
+    paymentStatus === "Partially Paid"
+      ? Math.max(
+          grandTotal - amountPaid,
+          0
+        )
+      : 0;
+
+
+  // -----------------------------
   // GENERATE INVOICE
-  // =========================
+  // -----------------------------
 
   const generateInvoice = () => {
     if (!customerName.trim()) {
       alert("Please enter customer name.");
-      return;
-    }
-
-    if (!customerPhone.trim()) {
-      alert("Please enter customer phone.");
       return;
     }
 
@@ -137,720 +170,929 @@ export default function InvoicePage() {
       return;
     }
 
-    const invalidItem = items.some(
+    const validItems = items.filter(
       (item) =>
-        !item.name.trim() ||
-        item.quantity <= 0 ||
-        item.unitPrice < 0
+        item.name.trim() !== "" &&
+        Number(item.quantity) > 0 &&
+        Number(item.unitPrice) >= 0
     );
 
-    if (invalidItem) {
+    if (validItems.length === 0) {
       alert(
-        "Please complete all item details before generating the invoice."
+        "Please add at least one item with a name."
       );
       return;
     }
 
-    const data: InvoiceData = {
-      customerName,
-      customerPhone,
-      invoiceNumber,
-      invoiceDate,
-      items: [...items],
-      amountPaid,
-      paymentStatus,
-    };
-
-    setInvoiceData(data);
     setGenerated(true);
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    setTimeout(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }, 100);
   };
 
-  // =========================
-  // SAVE INVOICE AS PNG
-  // =========================
+
+  // -----------------------------
+  // SAVE AS PNG
+  // -----------------------------
 
   const saveAsImage = async () => {
-    const invoice =
-      document.getElementById("invoice-preview");
-
-    if (!invoice) {
-      alert("Invoice could not be found.");
+    if (!invoiceRef.current) {
       return;
     }
 
     try {
-      const dataUrl = await toPng(invoice, {
-        quality: 1,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        cacheBust: true,
-      });
+      const dataUrl = await toPng(
+        invoiceRef.current,
+        {
+          quality: 1,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+        }
+      );
 
-      const link = document.createElement("a");
+      const link =
+        document.createElement("a");
 
       link.download = `Invoice-${
-        invoiceData?.invoiceNumber || "BizzBill"
+        invoiceNumber || "invoice"
       }.png`;
 
       link.href = dataUrl;
 
       link.click();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Invoice PNG error:",
+        error
+      );
+
       alert(
         "Unable to save the invoice as an image. Please try again."
       );
     }
   };
 
-  // =========================
-  // PRINT
-  // =========================
 
-  const printInvoice = () => {
-    window.print();
-  };
+  // ============================================================
+  // GENERATED INVOICE
+  // ============================================================
 
-  // =========================
-  // GENERATED INVOICE VIEW
-  // =========================
-
-  if (generated && invoiceData) {
-    const previewSubtotal =
-      invoiceData.items.reduce(
-        (total, item) =>
-          total + item.quantity * item.unitPrice,
-        0
-      );
-
-    const previewBalance = Math.max(
-      previewSubtotal - invoiceData.amountPaid,
-      0
-    );
-
+  if (generated) {
     return (
-      <main className="min-h-screen bg-gray-100 px-4 py-8">
+      <>
+        <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-10">
 
-        {/* HOME BUTTON */}
+          {/* TOP NAVIGATION */}
 
-        <div className="mx-auto mb-6 flex max-w-5xl justify-start print:hidden">
-          <Link
-            href="/"
-            className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
+          <div className="no-print mx-auto mb-5 flex w-full max-w-5xl items-center justify-between gap-3">
+
+            <Link
+              href="/"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50"
+            >
+              ← Home
+            </Link>
+
+            <button
+              type="button"
+              onClick={() =>
+                setGenerated(false)
+              }
+              className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+            >
+              Edit Invoice
+            </button>
+
+          </div>
+
+
+          {/* ================================================== */}
+          {/* INVOICE */}
+          {/* ================================================== */}
+
+          <div
+            ref={invoiceRef}
+            className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-lg"
           >
-            ← Home
-          </Link>
-        </div>
 
-        {/* INVOICE */}
+            {/* ================= HEADER ================= */}
 
-        <div
-          id="invoice-preview"
-          className="mx-auto max-w-5xl bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10"
-        >
+            <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
-          {/* HEADER */}
+              <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
 
-          <div className="flex flex-col gap-6 border-b border-gray-200 pb-8 sm:flex-row sm:items-start sm:justify-between">
+                {/* BUSINESS */}
 
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Bizz
-                <span className="text-blue-600">
-                  Bill
-                </span>
-              </h1>
+                <div>
+                  <h1 className="text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
+                    Bizz
+                    <span className="text-blue-600">
+                      Bill
+                    </span>
+                  </h1>
 
-              <p className="mt-1 text-sm text-gray-500">
-                Professional Invoice
-              </p>
-            </div>
+                  <p className="mt-2 text-sm font-semibold text-gray-600 sm:text-base">
+                    Professional Invoice
+                  </p>
+                </div>
 
-            <div className="text-left sm:text-right">
-              <h2 className="text-3xl font-bold text-gray-900">
-                INVOICE
-              </h2>
 
-              <p className="mt-2 text-sm text-gray-500">
-                Invoice No:{" "}
-                <span className="font-semibold text-gray-800">
-                  {invoiceData.invoiceNumber}
-                </span>
-              </p>
+                {/* INVOICE DETAILS */}
 
-              <p className="mt-1 text-sm text-gray-500">
-                Date:{" "}
-                <span className="font-semibold text-gray-800">
-                  {invoiceData.invoiceDate}
-                </span>
-              </p>
-            </div>
+                <div className="sm:text-right">
 
-          </div>
+                  <h2 className="text-3xl font-extrabold text-gray-950 sm:text-4xl">
+                    INVOICE
+                  </h2>
 
-          {/* CUSTOMER */}
+                  <div className="mt-4 space-y-2 text-sm text-gray-600 sm:text-base">
 
-          <div className="flex flex-col gap-6 border-b border-gray-200 py-8 sm:flex-row sm:items-start sm:justify-between">
+                    <p>
+                      Invoice No:{" "}
+                      <span className="font-bold text-gray-950">
+                        {invoiceNumber}
+                      </span>
+                    </p>
 
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                Bill To
-              </p>
+                    <p>
+                      Date:{" "}
+                      <span className="font-bold text-gray-950">
+                        {invoiceDate}
+                      </span>
+                    </p>
 
-              <h3 className="mt-2 text-xl font-bold text-gray-900">
-                {invoiceData.customerName}
-              </h3>
+                  </div>
 
-              <p className="mt-1 text-sm text-gray-600">
-                {invoiceData.customerPhone}
-              </p>
-            </div>
+                </div>
 
-            <div className="sm:text-right">
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                Payment Status
-              </p>
-
-              <p
-                className={`mt-2 text-lg font-bold ${
-                  invoiceData.paymentStatus === "Paid"
-                    ? "text-green-600"
-                    : invoiceData.paymentStatus ===
-                      "Partially Paid"
-                    ? "text-orange-600"
-                    : "text-red-600"
-                }`}
-              >
-                {invoiceData.paymentStatus}
-              </p>
-            </div>
-
-          </div>
-
-          {/* ITEMS */}
-
-          <div className="py-8">
-
-            <div className="grid grid-cols-12 border-b border-gray-200 pb-3 text-xs font-bold uppercase tracking-wide text-gray-500">
-
-              <div className="col-span-5">
-                Item
-              </div>
-
-              <div className="col-span-2 text-center">
-                Qty
-              </div>
-
-              <div className="col-span-2 text-right">
-                Unit Price
-              </div>
-
-              <div className="col-span-3 text-right">
-                Amount
               </div>
 
             </div>
 
-            {invoiceData.items.map((item) => (
+
+            {/* ================= CUSTOMER ================= */}
+
+            <div className="border-b border-gray-200 px-5 py-7 sm:px-10">
+
+              <div className="grid grid-cols-1 gap-7 sm:grid-cols-2">
+
+                {/* BILL TO */}
+
+                <div>
+
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">
+                    Bill To
+                  </p>
+
+                  <p className="mt-2 break-words text-xl font-extrabold text-gray-950 sm:text-2xl">
+                    {customerName}
+                  </p>
+
+                  {customerPhone && (
+                    <p className="mt-2 break-words text-sm font-medium text-gray-700 sm:text-base">
+                      {customerPhone}
+                    </p>
+                  )}
+
+                </div>
+
+
+                {/* PAYMENT STATUS */}
+
+                <div className="sm:text-right">
+
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">
+                    Payment Status
+                  </p>
+
+                  <p
+                    className={`mt-2 text-xl font-extrabold sm:text-2xl ${
+                      paymentStatus === "Paid"
+                        ? "text-green-600"
+                        : paymentStatus ===
+                          "Partially Paid"
+                        ? "text-orange-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {paymentStatus}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+
+            {/* ================================================== */}
+            {/* ITEMS */}
+            {/* ================================================== */}
+
+            <div className="border-b border-gray-200 px-5 py-6 sm:px-10">
+
+              {/* ITEM HEADER */}
 
               <div
-                key={item.id}
-                className="grid grid-cols-12 border-b border-gray-100 py-4 text-sm text-gray-800"
+                className="
+                  grid
+                  grid-cols-[minmax(0,1.6fr)_minmax(0,0.5fr)_minmax(0,1fr)_minmax(0,1fr)]
+                  gap-2
+                  border-b
+                  border-gray-300
+                  pb-4
+                  text-xs
+                  font-extrabold
+                  text-gray-700
+                  sm:gap-4
+                  sm:text-sm
+                "
               >
 
-                <div className="col-span-5">
-                  {item.name}
+                <div>
+                  Item
                 </div>
 
-                <div className="col-span-2 text-center">
-                  {item.quantity}
+                <div className="text-center">
+                  Qty
                 </div>
 
-                <div className="col-span-2 text-right">
-                  ₦
-                  {item.unitPrice.toLocaleString(
-                    "en-NG"
-                  )}
+                <div className="text-right">
+                  Unit Price
                 </div>
 
-                <div className="col-span-3 text-right font-semibold">
-                  ₦
-                  {(
-                    item.quantity *
-                    item.unitPrice
-                  ).toLocaleString("en-NG")}
+                <div className="text-right">
+                  Amount
                 </div>
 
               </div>
 
-            ))}
+
+              {/* ITEM ROWS */}
+
+              <div>
+
+                {items.map(
+                  (item, index) => {
+
+                    // Don't display completely
+                    // empty rows in generated invoice
+                    if (
+                      !item.name.trim() &&
+                      item.unitPrice === 0
+                    ) {
+                      return null;
+                    }
+
+                    return (
+                      <div
+                        key={index}
+                        className="
+                          grid
+                          grid-cols-[minmax(0,1.6fr)_minmax(0,0.5fr)_minmax(0,1fr)_minmax(0,1fr)]
+                          gap-2
+                          border-b
+                          border-gray-100
+                          py-4
+                          text-xs
+                          sm:gap-4
+                          sm:text-sm
+                        "
+                      >
+
+                        {/* ITEM */}
+
+                        <div className="min-w-0 break-words font-semibold text-gray-950">
+                          {item.name}
+                        </div>
+
+
+                        {/* QUANTITY */}
+
+                        <div className="text-center font-medium text-gray-900">
+                          {item.quantity}
+                        </div>
+
+
+                        {/* UNIT PRICE */}
+
+                        <div className="min-w-0 text-right font-medium text-gray-900">
+                          ₦
+                          {Number(
+                            item.unitPrice
+                          ).toLocaleString(
+                            "en-NG"
+                          )}
+                        </div>
+
+
+                        {/* AMOUNT */}
+
+                        <div className="min-w-0 text-right font-extrabold text-gray-950">
+                          ₦
+                          {itemTotal(
+                            item
+                          ).toLocaleString(
+                            "en-NG"
+                          )}
+                        </div>
+
+                      </div>
+                    );
+                  }
+                )}
+
+              </div>
+
+            </div>
+
+
+            {/* ================================================== */}
+            {/* TOTALS */}
+            {/* ================================================== */}
+
+            <div className="border-b border-gray-200 px-5 py-7 sm:px-10">
+
+              <div className="ml-auto w-full max-w-md space-y-5">
+
+                {/* GRAND TOTAL */}
+
+                <div className="flex items-center justify-between gap-5 text-base sm:text-lg">
+
+                  <span className="font-semibold text-gray-700">
+                    Grand Total
+                  </span>
+
+                  <span className="shrink-0 font-extrabold text-gray-950">
+                    ₦
+                    {grandTotal.toLocaleString(
+                      "en-NG"
+                    )}
+                  </span>
+
+                </div>
+
+
+                {/* PARTIAL PAYMENT */}
+
+                {paymentStatus ===
+                  "Partially Paid" && (
+                  <>
+                    {/* AMOUNT PAID */}
+
+                    <div className="flex items-center justify-between gap-5 text-base sm:text-lg">
+
+                      <span className="font-semibold text-gray-700">
+                        Amount Paid
+                      </span>
+
+                      <span className="shrink-0 font-extrabold text-gray-950">
+                        ₦
+                        {amountPaid.toLocaleString(
+                          "en-NG"
+                        )}
+                      </span>
+
+                    </div>
+
+
+                    {/* BALANCE */}
+
+                    <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5 text-base sm:text-lg">
+
+                      <span className="font-extrabold text-gray-700">
+                        Balance Due
+                      </span>
+
+                      <span className="shrink-0 font-extrabold text-red-600">
+                        ₦
+                        {balanceDue.toLocaleString(
+                          "en-NG"
+                        )}
+                      </span>
+
+                    </div>
+
+                  </>
+                )}
+
+              </div>
+
+            </div>
+
+
+            {/* ================================================== */}
+            {/* FOOTER */}
+            {/* ================================================== */}
+
+            <div className="px-5 py-7 text-center sm:px-10">
+
+              <p className="text-base font-extrabold text-gray-900 sm:text-lg">
+                Thank you for your business.
+              </p>
+
+              <p className="mt-2 text-xs font-medium text-gray-500 sm:text-sm">
+                Generated with BizzBill
+              </p>
+
+            </div>
 
           </div>
 
-          {/* TOTALS */}
 
-          <div className="ml-auto max-w-md">
+          {/* ================================================== */}
+          {/* ACTION BUTTONS */}
+          {/* ================================================== */}
 
-            <div className="flex justify-between border-b border-gray-100 py-3 text-sm">
-              <span className="text-gray-600">
-                Subtotal
-              </span>
+          <div className="no-print mx-auto mt-5 grid w-full max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2">
 
-              <span className="font-semibold text-gray-900">
-                ₦
-                {previewSubtotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
+            {/* SAVE PNG */}
 
-            <div className="flex justify-between border-b border-gray-100 py-3 text-sm">
-              <span className="text-gray-600">
-                Amount Paid
-              </span>
+            <button
+              type="button"
+              onClick={saveAsImage}
+              className="rounded-xl bg-blue-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-blue-700"
+            >
+              🖼 Save Invoice as PNG
+            </button>
 
-              <span className="font-semibold text-gray-900">
-                ₦
-                {invoiceData.amountPaid.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
 
-            <div className="flex justify-between border-b border-gray-100 py-3 text-sm">
-              <span className="font-semibold text-gray-800">
-                Balance Due
-              </span>
+            {/* PRINT */}
 
-              <span className="font-bold text-red-600">
-                ₦
-                {previewBalance.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
-
-            <div className="mt-4 flex justify-between border-t-2 border-gray-900 pt-4">
-
-              <span className="text-lg font-bold text-gray-900">
-                Grand Total
-              </span>
-
-              <span className="text-xl font-bold text-gray-900">
-                ₦
-                {previewSubtotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-
-            </div>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="rounded-xl bg-gray-900 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-black"
+            >
+              🖨 Print Invoice
+            </button>
 
           </div>
 
-          {/* FOOTER */}
+        </main>
 
-          <div className="mt-12 border-t border-gray-200 pt-6 text-center">
 
-            <p className="font-semibold text-gray-800">
-              Thank you for your business.
-            </p>
+        {/* ================================================== */}
+        {/* PRINT STYLES */}
+        {/* ================================================== */}
 
-            <p className="mt-1 text-sm text-gray-400">
-              Generated with BizzBill
-            </p>
+        <style jsx global>{`
 
-          </div>
+          @media print {
 
-        </div>
+            body {
+              background: white !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
 
-        {/* ACTION BUTTONS */}
+            .no-print {
+              display: none !important;
+            }
 
-        <div className="mx-auto mt-6 grid max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 print:hidden">
+            main {
+              background: white !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
 
-          <button
-            type="button"
-            onClick={saveAsImage}
-            className="rounded-xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700"
-          >
-            🖼️ Save Invoice as PNG
-          </button>
+            [data-invoice="true"] {
+              box-shadow: none !important;
+              border-radius: 0 !important;
+              max-width: none !important;
+              width: 100% !important;
+            }
 
-          <button
-            type="button"
-            onClick={printInvoice}
-            className="rounded-xl bg-gray-900 px-5 py-4 font-bold text-white transition hover:bg-gray-800"
-          >
-            🖨️ Print Invoice
-          </button>
+          }
 
-        </div>
-
-      </main>
+        `}</style>
+      </>
     );
   }
 
-  // =========================
-  // INVOICE FORM
-  // =========================
+
+  // ============================================================
+  // CREATE INVOICE FORM
+  // ============================================================
 
   return (
-    <main className="min-h-screen bg-gray-100 px-4 py-8">
+    <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
 
-      {/* HEADER */}
+      <div className="mx-auto w-full max-w-5xl">
 
-      <div className="mx-auto mb-8 flex max-w-5xl items-center justify-between">
+        {/* HEADER */}
 
-        <Link
-          href="/"
-          className="text-2xl font-bold text-gray-900"
-        >
-          Bizz
-          <span className="text-blue-600">
-            Bill
-          </span>
-        </Link>
+        <div className="mb-6 flex items-center justify-between gap-3">
 
-        <Link
-          href="/"
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-        >
-          ← Home
-        </Link>
+          <Link
+            href="/"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-sm transition hover:bg-gray-50"
+          >
+            ← Home
+          </Link>
 
-      </div>
-
-      <div className="mx-auto max-w-5xl">
-
-        {/* FORM CARD */}
-
-        <section className="rounded-2xl bg-white p-6 shadow-sm sm:p-8">
-
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl font-extrabold text-gray-950 sm:text-2xl">
             Create Invoice
           </h1>
 
-          <p className="mt-1 text-sm text-gray-500">
-            Enter the details below to generate your invoice.
-          </p>
+        </div>
 
-          {/* INVOICE DETAILS */}
 
-          <div className="mt-8">
+        {/* FORM CARD */}
 
-            <h2 className="mb-4 text-lg font-bold text-gray-900">
-              Invoice Details
-            </h2>
+        <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <h2 className="mb-7 text-2xl font-extrabold text-gray-950">
+            Invoice Details
+          </h2>
+
+
+          {/* CUSTOMER DETAILS */}
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+
+            {/* CUSTOMER NAME */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                Customer name
+              </label>
 
               <input
                 type="text"
-                placeholder="Customer name"
                 value={customerName}
                 onChange={(e) =>
-                  setCustomerName(e.target.value)
+                  setCustomerName(
+                    e.target.value
+                  )
                 }
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500"
+                placeholder="Customer name"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-300
+                  bg-white
+                  px-4
+                  py-4
+                  text-base
+                  font-semibold
+                  text-gray-950
+                  placeholder:text-gray-500
+                  focus:border-blue-600
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-blue-100
+                "
               />
+
+            </div>
+
+
+            {/* PHONE */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                Customer phone
+              </label>
 
               <input
                 type="tel"
-                placeholder="Customer phone"
                 value={customerPhone}
                 onChange={(e) =>
-                  setCustomerPhone(e.target.value)
+                  setCustomerPhone(
+                    e.target.value
+                  )
                 }
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500"
+                placeholder="Customer phone"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-300
+                  bg-white
+                  px-4
+                  py-4
+                  text-base
+                  font-semibold
+                  text-gray-950
+                  placeholder:text-gray-500
+                  focus:border-blue-600
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-blue-100
+                "
               />
+
+            </div>
+
+
+            {/* INVOICE NUMBER */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                Invoice number
+              </label>
 
               <input
                 type="text"
-                placeholder="Invoice number"
                 value={invoiceNumber}
                 onChange={(e) =>
-                  setInvoiceNumber(e.target.value)
+                  setInvoiceNumber(
+                    e.target.value
+                  )
                 }
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500"
+                placeholder="Invoice number"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-300
+                  bg-white
+                  px-4
+                  py-4
+                  text-base
+                  font-semibold
+                  text-gray-950
+                  placeholder:text-gray-500
+                  focus:border-blue-600
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-blue-100
+                "
               />
+
+            </div>
+
+
+            {/* DATE */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                Invoice date
+              </label>
 
               <input
                 type="date"
                 value={invoiceDate}
                 onChange={(e) =>
-                  setInvoiceDate(e.target.value)
+                  setInvoiceDate(
+                    e.target.value
+                  )
                 }
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-300
+                  bg-white
+                  px-4
+                  py-4
+                  text-base
+                  font-semibold
+                  text-gray-950
+                  focus:border-blue-600
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-blue-100
+                "
               />
 
             </div>
 
           </div>
 
-          {/* ITEMS */}
+
+          {/* ================================================== */}
+          {/* ITEMS FORM */}
+          {/* ================================================== */}
 
           <div className="mt-8">
 
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-5 flex items-center justify-between gap-3">
 
-              <h2 className="text-lg font-bold text-gray-900">
+              <h2 className="text-2xl font-extrabold text-gray-950">
                 Items
               </h2>
 
               <button
                 type="button"
                 onClick={addItem}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700"
               >
                 + Add Item
               </button>
 
             </div>
 
+
             <div className="space-y-4">
 
-              {items.map((item) => (
+              {items.map(
+                (item, index) => (
 
-                <div
-                  key={item.id}
-                  className="rounded-xl border border-gray-200 bg-gray-50 p-4"
-                >
+                  <div
+                    key={index}
+                    className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
+                  >
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 
-                    {/* ITEM NAME */}
+                      {/* ITEM */}
 
-                    <input
-                      type="text"
-                      placeholder="Item"
-                      value={item.name}
-                      onChange={(e) =>
-                        updateItem(
-                          item.id,
-                          "name",
-                          e.target.value
-                        )
-                      }
-                      className="rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-blue-500 md:col-span-4"
-                    />
+                      <div>
 
-                    {/* QUANTITY */}
+                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                          Item
+                        </label>
 
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Quantity"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateItem(
-                          item.id,
-                          "quantity",
-                          e.target.value
-                        )
-                      }
-                      className="rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-blue-500 md:col-span-2"
-                    />
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) =>
+                            updateItem(
+                              index,
+                              "name",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Item / Service"
+                          className="
+                            w-full
+                            rounded-xl
+                            border
+                            border-gray-300
+                            bg-white
+                            px-4
+                            py-3.5
+                            text-base
+                            font-semibold
+                            text-gray-950
+                            placeholder:text-gray-500
+                            focus:border-blue-600
+                            focus:outline-none
+                          "
+                        />
 
-                    {/* UNIT PRICE */}
+                      </div>
 
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Unit price"
-                      value={
-                        item.unitPrice === 0
-                          ? ""
-                          : item.unitPrice
-                      }
-                      onChange={(e) =>
-                        updateItem(
-                          item.id,
-                          "unitPrice",
-                          e.target.value
-                        )
-                      }
-                      className="rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-blue-500 md:col-span-3"
-                    />
 
-                    {/* AUTOMATIC TOTAL */}
+                      {/* QUANTITY */}
 
-                    <div className="flex items-center rounded-lg border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 md:col-span-2">
-                      ₦
-                      {getItemTotal(
-                        item
-                      ).toLocaleString("en-NG")}
+                      <div>
+
+                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                          Quantity
+                        </label>
+
+                        <input
+                          type="number"
+                          min="1"
+                          value={
+                            item.quantity
+                          }
+                          onChange={(e) =>
+                            updateItem(
+                              index,
+                              "quantity",
+                              Math.max(
+                                1,
+                                Number(
+                                  e.target.value
+                                )
+                              )
+                            )
+                          }
+                          className="
+                            w-full
+                            rounded-xl
+                            border
+                            border-gray-300
+                            bg-white
+                            px-4
+                            py-3.5
+                            text-base
+                            font-semibold
+                            text-gray-950
+                            focus:border-blue-600
+                            focus:outline-none
+                          "
+                        />
+
+                      </div>
+
+
+                      {/* UNIT PRICE */}
+
+                      <div>
+
+                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                          Unit price
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0"
+                          value={
+                            item.unitPrice || ""
+                          }
+                          onChange={(e) =>
+                            updateItem(
+                              index,
+                              "unitPrice",
+                              Math.max(
+                                0,
+                                Number(
+                                  e.target.value
+                                )
+                              )
+                            )
+                          }
+                          placeholder="₦0"
+                          className="
+                            w-full
+                            rounded-xl
+                            border
+                            border-gray-300
+                            bg-white
+                            px-4
+                            py-3.5
+                            text-base
+                            font-semibold
+                            text-gray-950
+                            placeholder:text-gray-500
+                            focus:border-blue-600
+                            focus:outline-none
+                          "
+                        />
+
+                      </div>
+
                     </div>
 
-                    {/* REMOVE */}
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        removeItem(item.id)
-                      }
-                      disabled={items.length === 1}
-                      className="rounded-lg px-3 py-3 font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 md:col-span-1"
-                    >
-                      Remove
-                    </button>
+                    {/* ITEM TOTAL / REMOVE */}
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+
+                      <p className="font-extrabold text-gray-900">
+                        Item total: ₦
+                        {itemTotal(
+                          item
+                        ).toLocaleString(
+                          "en-NG"
+                        )}
+                      </p>
+
+
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeItem(
+                              index
+                            )
+                          }
+                          className="font-extrabold text-red-600 transition hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+
+                    </div>
 
                   </div>
 
-                </div>
-
-              ))}
-
-            </div>
-
-          </div>
-
-          {/* PAYMENT */}
-
-          <div className="mt-8">
-
-            <h2 className="mb-4 text-lg font-bold text-gray-900">
-              Payment
-            </h2>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
-              {/* AMOUNT PAID */}
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Amount Paid
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Amount paid"
-                  value={
-                    amountPaid === 0
-                      ? ""
-                      : amountPaid
-                  }
-                  onChange={(e) =>
-                    setAmountPaid(
-                      Number(e.target.value)
-                    )
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* BALANCE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Balance Due
-                </label>
-
-                <div className="rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 font-bold text-gray-900">
-                  ₦
-                  {balanceDue.toLocaleString(
-                    "en-NG"
-                  )}
-                </div>
-              </div>
-
-              {/* PAYMENT STATUS */}
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Payment Status
-                </label>
-
-                <select
-                  value={paymentStatus}
-                  onChange={(e) =>
-                    setPaymentStatus(
-                      e.target.value as
-                        | "Paid"
-                        | "Partially Paid"
-                        | "Unpaid"
-                    )
-                  }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-blue-500"
-                >
-                  <option value="Unpaid">
-                    Unpaid
-                  </option>
-
-                  <option value="Partially Paid">
-                    Partially Paid
-                  </option>
-
-                  <option value="Paid">
-                    Paid
-                  </option>
-                </select>
-              </div>
+                )
+              )}
 
             </div>
 
           </div>
 
-          {/* TOTALS */}
 
-          <div className="mt-8 rounded-xl bg-gray-50 p-5">
+          {/* ================================================== */}
+          {/* GRAND TOTAL */}
+          {/* ================================================== */}
 
-            <div className="flex justify-between border-b border-gray-200 py-3">
+          <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
-              <span className="font-semibold text-gray-600">
-                Subtotal
-              </span>
+            <div className="flex items-center justify-between gap-4">
 
-              <span className="font-bold text-gray-900">
-                ₦
-                {subtotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-
-            </div>
-
-            <div className="flex justify-between border-b border-gray-200 py-3">
-
-              <span className="font-semibold text-gray-600">
-                Amount Paid
-              </span>
-
-              <span className="font-bold text-gray-900">
-                ₦
-                {amountPaid.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-
-            </div>
-
-            <div className="flex justify-between border-b border-gray-200 py-3">
-
-              <span className="font-semibold text-gray-600">
-                Balance Due
-              </span>
-
-              <span className="font-bold text-red-600">
-                ₦
-                {balanceDue.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-
-            </div>
-
-            <div className="flex justify-between pt-4">
-
-              <span className="text-xl font-bold text-gray-900">
+              <span className="font-extrabold text-gray-900">
                 Grand Total
               </span>
 
-              <span className="text-2xl font-bold text-blue-600">
+              <span className="text-xl font-extrabold text-gray-950">
                 ₦
                 {grandTotal.toLocaleString(
                   "en-NG"
@@ -861,17 +1103,171 @@ export default function InvoicePage() {
 
           </div>
 
+
+          {/* ================================================== */}
+          {/* PAYMENT STATUS */}
+          {/* ================================================== */}
+
+          <div className="mt-8">
+
+            <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              Payment status
+            </label>
+
+            <select
+              value={paymentStatus}
+              onChange={(e) => {
+
+                const value =
+                  e.target.value as PaymentStatus;
+
+                setPaymentStatus(value);
+
+                if (value !== "Partially Paid") {
+                  setAmountPaid(0);
+                }
+
+              }}
+              className="
+                w-full
+                rounded-xl
+                border
+                border-gray-300
+                bg-white
+                px-4
+                py-4
+                text-base
+                font-extrabold
+                text-gray-950
+                focus:border-blue-600
+                focus:outline-none
+                focus:ring-2
+                focus:ring-blue-100
+              "
+            >
+
+              <option value="Unpaid">
+                Unpaid
+              </option>
+
+              <option value="Paid">
+                Paid
+              </option>
+
+              <option value="Partially Paid">
+                Partially Paid
+              </option>
+
+            </select>
+
+          </div>
+
+
+          {/* ================================================== */}
+          {/* PARTIAL PAYMENT */}
+          {/* ================================================== */}
+
+          {paymentStatus ===
+            "Partially Paid" && (
+
+            <div className="mt-5">
+
+              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                Amount paid
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                max={grandTotal}
+                value={
+                  amountPaid || ""
+                }
+                onChange={(e) => {
+
+                  const value =
+                    Number(
+                      e.target.value
+                    );
+
+                  setAmountPaid(
+                    Math.min(
+                      Math.max(
+                        value,
+                        0
+                      ),
+                      grandTotal
+                    )
+                  );
+
+                }}
+                placeholder="₦0"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-300
+                  bg-white
+                  px-4
+                  py-4
+                  text-base
+                  font-semibold
+                  text-gray-950
+                  placeholder:text-gray-500
+                  focus:border-blue-600
+                  focus:outline-none
+                "
+              />
+
+
+              {/* BALANCE */}
+
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-xl bg-red-50 p-4">
+
+                <span className="font-extrabold text-gray-800">
+                  Balance Due
+                </span>
+
+                <span className="font-extrabold text-red-600">
+                  ₦
+                  {balanceDue.toLocaleString(
+                    "en-NG"
+                  )}
+                </span>
+
+              </div>
+
+            </div>
+
+          )}
+
+
+          {/* ================================================== */}
           {/* GENERATE */}
+          {/* ================================================== */}
 
           <button
             type="button"
             onClick={generateInvoice}
-            className="mt-8 w-full rounded-xl bg-blue-600 px-6 py-4 text-lg font-bold text-white transition hover:bg-blue-700"
+            className="
+              mt-8
+              w-full
+              rounded-xl
+              bg-blue-600
+              px-5
+              py-4
+              text-lg
+              font-extrabold
+              text-white
+              shadow-sm
+              transition
+              hover:bg-blue-700
+            "
           >
             Generate Invoice
           </button>
 
-        </section>
+        </div>
 
       </div>
 
