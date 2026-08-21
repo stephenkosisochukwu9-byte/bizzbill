@@ -494,7 +494,7 @@ export default function ReceiptPage() {
             <div className="px-5 py-4 text-center sm:px-7 sm:py-5">
 
               <p className="text-base font-extrabold text-gray-950 sm:text-lg">
-                Thank you for your patronage.
+                Thanks for your patronage.
               </p>
 
               <p className="mt-1 text-xs font-semibold text-gray-600 sm:text-sm">
