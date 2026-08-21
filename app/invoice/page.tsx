@@ -510,11 +510,11 @@ export default function InvoicePage() {
 
           <div className="mt-12 border-t pt-8 text-center">
 
-            <p className="font-semibold text-gray-800">
+            <p className="font-semibold text-gray-900">
               Thank you for your patronage.
             </p>
 
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-gray-800">
               Generated with BizzBill
             </p>
 
@@ -553,7 +553,7 @@ export default function InvoicePage() {
           <button
             type="button"
             onClick={editInvoice}
-            className="rounded-xl border border-gray-300 bg-white px-6 py-4 font-bold text-gray-700 transition hover:bg-gray-50"
+            className="rounded-xl border border-gray-300 bg-white px-6 py-4 font-bold text-gray-900 transition hover:bg-gray-50"
           >
             ← Edit Invoice
           </button>
@@ -619,7 +619,7 @@ export default function InvoicePage() {
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:bg-gray-50"
           >
             ← Home
           </Link>
@@ -638,7 +638,7 @@ export default function InvoicePage() {
             Create Invoice
           </h1>
 
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-gray-900">
             Enter the invoice details below.
           </p>
 
@@ -660,7 +660,7 @@ export default function InvoicePage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
+              <label className="mb-2 block text-sm font-semibold text-gray-900">
                 Customer name
               </label>
 
@@ -673,7 +673,7 @@ export default function InvoicePage() {
                   )
                 }
                 placeholder="Customer name"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
@@ -682,7 +682,7 @@ export default function InvoicePage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
+              <label className="mb-2 block text-sm font-semibold text-gray-900">
                 Customer phone
               </label>
 
@@ -695,7 +695,7 @@ export default function InvoicePage() {
                   )
                 }
                 placeholder="Customer phone"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
@@ -704,7 +704,7 @@ export default function InvoicePage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
+              <label className="mb-2 block text-sm font-semibold text-gray-900">
                 Invoice number
               </label>
 
@@ -717,7 +717,7 @@ export default function InvoicePage() {
                   )
                 }
                 placeholder="Invoice number"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
@@ -726,7 +726,7 @@ export default function InvoicePage() {
 
             <div>
 
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
+              <label className="mb-2 block text-sm font-semibold text-gray-900">
                 Invoice date
               </label>
 
@@ -738,7 +738,7 @@ export default function InvoicePage() {
                     e.target.value
                   )
                 }
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
@@ -782,7 +782,7 @@ export default function InvoicePage() {
 
                     <div className="md:col-span-4">
 
-                      <label className="mb-2 block text-xs font-semibold text-gray-500">
+                      <label className="mb-2 block text-xs font-semibold text-gray-900">
                         Item
                       </label>
 
@@ -797,7 +797,7 @@ export default function InvoicePage() {
                           )
                         }
                         placeholder="Item / Service"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 outline-none focus:border-blue-500"
+                        className="w-full rounded-lg border border-gray-800 bg-white px-3 py-3 outline-none focus:border-blue-500"
                       />
 
                     </div>
@@ -806,7 +806,7 @@ export default function InvoicePage() {
 
                     <div className="md:col-span-2">
 
-                      <label className="mb-2 block text-xs font-semibold text-gray-500">
+                      <label className="mb-2 block text-xs font-semibold text-gray-900">
                         Quantity
                       </label>
 
@@ -835,7 +835,7 @@ export default function InvoicePage() {
 
                     <div className="md:col-span-2">
 
-                      <label className="mb-2 block text-xs font-semibold text-gray-500">
+                      <label className="mb-2 block text-xs font-semibold text-gray-900">
                         Unit price
                       </label>
 
@@ -860,7 +860,7 @@ export default function InvoicePage() {
                           )
                         }
                         placeholder="₦0"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 outline-none focus:border-blue-500"
+                        className="w-full rounded-lg border border-gray-800 bg-white px-3 py-3 outline-none focus:border-blue-500"
                       />
 
                     </div>
@@ -869,11 +869,11 @@ export default function InvoicePage() {
 
                     <div className="md:col-span-3">
 
-                      <label className="mb-2 block text-xs font-semibold text-gray-500">
+                      <label className="mb-2 block text-xs font-semibold text-gray-900">
                         Item total
                       </label>
 
-                      <div className="flex h-[48px] items-center rounded-lg border border-gray-200 bg-gray-100 px-3 font-bold text-gray-900">
+                      <div className="flex h-[48px] items-center rounded-lg border border-gray-800 bg-gray-100 px-3 font-bold text-gray-900">
                         ₦
                         {getItemTotal(
                           item
@@ -898,7 +898,7 @@ export default function InvoicePage() {
                         disabled={
                           items.length === 1
                         }
-                        className="h-[48px] w-full rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="h-[48px] w-full rounded-lg border border-red-800 px-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Remove
                       </button>
@@ -969,7 +969,7 @@ export default function InvoicePage() {
 
               <div>
 
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <label className="mb-2 block text-sm font-semibold text-gray-900">
                   Payment status
                 </label>
 
@@ -981,7 +981,7 @@ export default function InvoicePage() {
                         .value as PaymentStatus
                     )
                   }
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-xl border border-gray-800 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 >
 
                   <option value="Unpaid">
@@ -1006,7 +1006,7 @@ export default function InvoicePage() {
                 "Partially Paid" && (
                 <div>
 
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-semibold text-gray-900">
                     Amount paid
                   </label>
 
@@ -1021,7 +1021,7 @@ export default function InvoicePage() {
                       )
                     }
                     placeholder="Amount paid"
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
 
                 </div>
@@ -1033,11 +1033,11 @@ export default function InvoicePage() {
 
             {paymentStatus ===
               "Partially Paid" && (
-              <div className="mt-5 rounded-xl border border-orange-200 bg-orange-50 p-5">
+              <div className="mt-5 rounded-xl border border-orange-500 bg-orange-50 p-5">
 
                 <div className="flex justify-between">
 
-                  <span className="font-semibold text-gray-700">
+                  <span className="font-semibold text-gray-900">
                     Balance Due
                   </span>
 
