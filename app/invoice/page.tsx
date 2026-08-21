@@ -253,33 +253,31 @@ export default function InvoicePage() {
 
           {/* ITEMS */}
 
-          <div className="overflow-x-auto px-6 py-7 sm:px-10">
+          <div className="w-full overflow-hidden px-4 py-6 sm:px-10">
 
-            <table className="w-full min-w-[600px] text-sm">
 
-              <thead>
+            <table className="w-full table fixed">
 
-                <tr className="border-b border-gray-300 text-left">
+             <thead>
+  <tr className="border-b border-gray-300">
+    <th className="w-[40%] pb-4 text-left font-bold text-gray-800">
+      Item
+    </th>
 
-                  <th className="pb-4 font-bold text-gray-700">
-                    Item
-                  </th>
+    <th className="w-[15%] pb-4 text-center font-bold text-gray-800">
+      Qty
+    </th>
 
-                  <th className="pb-4 text-center font-bold text-gray-700">
-                    Qty
-                  </th>
+    <th className="w-[22%] pb-4 text-right font-bold text-gray-800">
+      Unit Price
+    </th>
 
-                  <th className="pb-4 text-right font-bold text-gray-700">
-                    Unit Price
-                  </th>
+    <th className="w-[23%] pb-4 text-right font-bold text-gray-800">
+      Amount
+    </th>
+  </tr>
+</thead>
 
-                  <th className="pb-4 text-right font-bold text-gray-700">
-                    Amount
-                  </th>
-
-                </tr>
-
-              </thead>
 
               <tbody>
 
