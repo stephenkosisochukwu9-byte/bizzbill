@@ -6,7 +6,7 @@ import Link from "next/link";
 
 type Item = {
   name: string;
-  quantity: number | "";
+  quantity: number;
   unitPrice: number;
 };
 
@@ -14,70 +14,31 @@ type PaymentMethod =
   | "Cash"
   | "Bank Transfer"
   | "Card"
-  | "Other";
+  | "Mobile Money";
 
 export default function ReceiptPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const [generated, setGenerated] = useState(false);
 
-  const [businessName, setBusinessName] =
-    useState("BizzBill");
-
-  const [customerName, setCustomerName] =
-    useState("");
-
-  const [receiptNumber, setReceiptNumber] =
-    useState("");
-
-  const [receiptDate, setReceiptDate] =
-    useState("");
+  const [businessName, setBusinessName] = useState("BizzBill");
+  const [customerName, setCustomerName] = useState("");
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const [receiptDate, setReceiptDate] = useState("");
 
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>("Cash");
 
-  const [amountPaid, setAmountPaid] =
-    useState<number>(0);
-
   const [items, setItems] = useState<Item[]>([
     {
       name: "",
-      quantity: "",
+      quantity: 1,
       unitPrice: 0,
     },
   ]);
 
   /* =========================
-     ITEM TOTAL
-  ========================= */
-
-  const itemTotal = (item: Item) => {
-    return (
-      Number(item.quantity || 0) *
-      Number(item.unitPrice || 0)
-    );
-  };
-
-  /* =========================
-     GRAND TOTAL
-  ========================= */
-
-  const grandTotal = items.reduce(
-    (total, item) => total + itemTotal(item),
-    0
-  );
-
-  /* =========================
-     BALANCE
-  ========================= */
-
-  const balanceDue = Math.max(
-    grandTotal - amountPaid,
-    0
-  );
-
-  /* =========================
-     UPDATE ITEM
+     ITEM FUNCTIONS
   ========================= */
 
   const updateItem = (
@@ -97,34 +58,33 @@ export default function ReceiptPage() {
     );
   };
 
-  /* =========================
-     ADD ITEM
-  ========================= */
-
   const addItem = () => {
     setItems((current) => [
       ...current,
       {
         name: "",
-        quantity: "",
+        quantity: 1,
         unitPrice: 0,
       },
     ]);
   };
 
-  /* =========================
-     REMOVE ITEM
-  ========================= */
-
   const removeItem = (index: number) => {
-    if (items.length === 1) {
-      return;
-    }
+    if (items.length === 1) return;
 
     setItems((current) =>
       current.filter((_, i) => i !== index)
     );
   };
+
+  const itemTotal = (item: Item) =>
+    Number(item.quantity || 0) *
+    Number(item.unitPrice || 0);
+
+  const totalAmount = items.reduce(
+    (total, item) => total + itemTotal(item),
+    0
+  );
 
   /* =========================
      GENERATE RECEIPT
@@ -151,19 +111,12 @@ export default function ReceiptPage() {
       return;
     }
 
-    if (items.some((item) => !item.name.trim())) {
-      alert("Please enter a name for every item.");
-      return;
-    }
+    const hasItem = items.some(
+      (item) => item.name.trim() !== ""
+    );
 
-    if (
-      items.some(
-        (item) =>
-          item.quantity === "" ||
-          Number(item.quantity) <= 0
-      )
-    ) {
-      alert("Please enter a valid quantity for every item.");
+    if (!hasItem) {
+      alert("Please add at least one item.");
       return;
     }
 
@@ -178,27 +131,21 @@ export default function ReceiptPage() {
   };
 
   /* =========================
-     SAVE RECEIPT AS PNG
+     SAVE AS PNG
   ========================= */
 
   const saveAsImage = async () => {
-    if (!receiptRef.current) {
-      return;
-    }
+    if (!receiptRef.current) return;
 
     try {
-      const dataUrl = await toPng(
-        receiptRef.current,
-        {
-          quality: 1,
-          pixelRatio: 2,
-          backgroundColor: "#ffffff",
-          cacheBust: true,
-        }
-      );
+      const dataUrl = await toPng(receiptRef.current, {
+        quality: 1,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
 
-      const link =
-        document.createElement("a");
+      const link = document.createElement("a");
 
       link.download = `Receipt-${
         receiptNumber || "receipt"
@@ -216,90 +163,67 @@ export default function ReceiptPage() {
     }
   };
 
-  /* ==================================================
+  /* =========================
      GENERATED RECEIPT
-  ================================================== */
+  ========================= */
 
   if (generated) {
     return (
       <>
-        <style jsx global>{`
-          @media print {
-            body {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-            }
+        <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-8 print:bg-white print:p-0">
 
-            @page {
-              size: A4;
-              margin: 0;
-            }
+          {/* TOP ACTIONS */}
 
-            .no-print {
-              display: none !important;
-            }
-
-            [data-print-receipt] {
-              width: 100% !important;
-              max-width: none !important;
-              margin: 0 !important;
-              box-shadow: none !important;
-              border-radius: 0 !important;
-            }
-          }
-        `}</style>
-
-        <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-10">
-
-          {/* =========================
-              TOP BUTTONS
-          ========================= */}
-
-          <div className="no-print mx-auto mb-5 flex w-full max-w-4xl items-center justify-between gap-3">
+          <div className="mx-auto mb-4 flex w-[calc(100%-8px)] max-w-2xl items-center justify-between gap-3 print:hidden">
 
             <Link
               href="/"
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-900 shadow-sm transition hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-900 shadow-sm transition hover:bg-gray-50 sm:px-4"
             >
               ← Home
             </Link>
 
             <button
               type="button"
-              onClick={() =>
-                setGenerated(false)
-              }
-              className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-extrabold text-blue-700 shadow-sm transition hover:bg-blue-50"
+              onClick={() => setGenerated(false)}
+              className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-50 sm:px-4"
             >
               Edit Receipt
             </button>
 
           </div>
 
-          {/* =========================
-              RECEIPT
-          ========================= */}
+          {/* RECEIPT */}
 
           <div
             ref={receiptRef}
-            data-print-receipt
-            className="mx-auto box-border w-full max-w-4xl overflow-hidden rounded-2xl bg-white text-gray-950 shadow-lg"
+            className="
+              mx-auto
+              w-[calc(100%-8px)]
+              max-w-2xl
+              overflow-hidden
+              rounded-xl
+              bg-white
+              text-gray-950
+              shadow-md
+              print:w-full
+              print:max-w-none
+              print:rounded-none
+              print:shadow-none
+            "
           >
 
             {/* =========================
-                RECEIPT HEADER
+                HEADER
             ========================= */}
 
-            <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
+            <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
 
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-                {/* BUSINESS */}
+                <div className="min-w-0">
 
-                <div>
-
-                  <h1 className="break-words text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
+                  <h1 className="break-words text-2xl font-extrabold tracking-tight text-gray-950 sm:text-3xl">
                     {businessName}
                   </h1>
 
@@ -309,26 +233,24 @@ export default function ReceiptPage() {
 
                 </div>
 
-                {/* RECEIPT DETAILS */}
-
                 <div className="sm:text-right">
 
-                  <h2 className="text-3xl font-extrabold text-gray-950 sm:text-4xl">
+                  <h2 className="text-2xl font-extrabold text-gray-950 sm:text-3xl">
                     RECEIPT
                   </h2>
 
-                  <div className="mt-3 space-y-1.5 text-sm text-gray-700 sm:text-base">
+                  <div className="mt-2 space-y-1 text-sm text-gray-700">
 
                     <p>
                       Receipt No:{" "}
-                      <span className="font-extrabold text-gray-950">
+                      <span className="font-bold text-gray-950">
                         {receiptNumber}
                       </span>
                     </p>
 
                     <p>
                       Date:{" "}
-                      <span className="font-extrabold text-gray-950">
+                      <span className="font-bold text-gray-950">
                         {receiptDate}
                       </span>
                     </p>
@@ -345,31 +267,27 @@ export default function ReceiptPage() {
                 CUSTOMER + PAYMENT
             ========================= */}
 
-            <div className="grid grid-cols-1 gap-7 border-b border-gray-200 px-5 py-7 sm:grid-cols-2 sm:px-10 sm:py-9">
-
-              {/* CUSTOMER */}
+            <div className="grid grid-cols-1 gap-5 border-b border-gray-200 px-5 py-5 sm:grid-cols-2 sm:px-7 sm:py-6">
 
               <div>
 
-                <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
                   Received From
                 </p>
 
-                <p className="mt-2 break-words text-xl font-extrabold text-gray-950 sm:text-2xl">
+                <p className="mt-1 break-words text-lg font-extrabold text-gray-950 sm:text-xl">
                   {customerName}
                 </p>
 
               </div>
 
-              {/* PAYMENT METHOD */}
-
               <div className="sm:text-right">
 
-                <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
                   Payment Method
                 </p>
 
-                <p className="mt-2 text-xl font-extrabold text-blue-600 sm:text-2xl">
+                <p className="mt-1 break-words text-lg font-extrabold text-blue-600 sm:text-xl">
                   {paymentMethod}
                 </p>
 
@@ -381,29 +299,31 @@ export default function ReceiptPage() {
                 ITEMS
             ========================= */}
 
-            <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
+            <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
 
-              <div className="w-full overflow-hidden">
+              {/* DESKTOP TABLE */}
 
-                <table className="w-full table-fixed border-collapse">
+              <div className="hidden sm:block">
+
+                <table className="w-full table-fixed">
 
                   <thead>
 
                     <tr className="border-b-2 border-gray-300">
 
-                      <th className="w-[38%] pb-4 pr-2 text-left text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[40%] pb-3 text-left text-sm font-extrabold text-gray-900">
                         Item / Service
                       </th>
 
-                      <th className="w-[13%] pb-4 text-center text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[15%] pb-3 text-center text-sm font-extrabold text-gray-900">
                         Qty
                       </th>
 
-                      <th className="w-[25%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[22%] pb-3 text-right text-sm font-extrabold text-gray-900">
                         Unit Price
                       </th>
 
-                      <th className="w-[24%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[23%] pb-3 text-right text-sm font-extrabold text-gray-900">
                         Total
                       </th>
 
@@ -413,46 +333,101 @@ export default function ReceiptPage() {
 
                   <tbody>
 
-                    {items.map(
-                      (item, index) => (
-                        <tr
-                          key={index}
-                          className="border-b border-gray-100"
-                        >
+                    {items.map((item, index) => (
 
-                          <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
-                            {item.name}
-                          </td>
+                      <tr
+                        key={index}
+                        className="border-b border-gray-100 last:border-b-0"
+                      >
 
-                          <td className="py-5 text-center text-sm font-bold text-gray-950 sm:text-base">
-                            {item.quantity}
-                          </td>
+                        <td className="break-words py-3 pr-2 text-left text-sm font-bold text-gray-950">
+                          {item.name || "Item / Service"}
+                        </td>
 
-                          <td className="whitespace-nowrap py-5 text-right text-sm font-semibold text-gray-950 sm:text-base">
-                            ₦
-                            {Number(
-                              item.unitPrice
-                            ).toLocaleString(
-                              "en-NG"
-                            )}
-                          </td>
+                        <td className="py-3 text-center text-sm font-bold text-gray-950">
+                          {item.quantity}
+                        </td>
 
-                          <td className="whitespace-nowrap py-5 text-right text-sm font-extrabold text-gray-950 sm:text-base">
-                            ₦
-                            {itemTotal(
-                              item
-                            ).toLocaleString(
-                              "en-NG"
-                            )}
-                          </td>
+                        <td className="py-3 text-right text-sm font-bold text-gray-950">
+                          ₦
+                          {Number(
+                            item.unitPrice || 0
+                          ).toLocaleString("en-NG")}
+                        </td>
 
-                        </tr>
-                      )
-                    )}
+                        <td className="py-3 text-right text-sm font-extrabold text-gray-950">
+                          ₦
+                          {itemTotal(item).toLocaleString(
+                            "en-NG"
+                          )}
+                        </td>
+
+                      </tr>
+
+                    ))}
 
                   </tbody>
 
                 </table>
+
+              </div>
+
+              {/* MOBILE ITEMS */}
+
+              <div className="space-y-3 sm:hidden">
+
+                <div className="grid grid-cols-[1fr_55px_95px_95px] gap-2 border-b-2 border-gray-300 pb-3">
+
+                  <p className="text-xs font-extrabold text-gray-900">
+                    Item / Service
+                  </p>
+
+                  <p className="text-center text-xs font-extrabold text-gray-900">
+                    Qty
+                  </p>
+
+                  <p className="text-right text-xs font-extrabold text-gray-900">
+                    Unit Price
+                  </p>
+
+                  <p className="text-right text-xs font-extrabold text-gray-900">
+                    Total
+                  </p>
+
+                </div>
+
+                {items.map((item, index) => (
+
+                  <div
+                    key={index}
+                    className="grid grid-cols-[1fr_55px_95px_95px] items-center gap-2 border-b border-gray-100 py-3 last:border-b-0"
+                  >
+
+                    <p className="min-w-0 break-words text-xs font-bold text-gray-950">
+                      {item.name || "Item / Service"}
+                    </p>
+
+                    <p className="text-center text-xs font-bold text-gray-950">
+                      {item.quantity}
+                    </p>
+
+                    <p className="text-right text-xs font-bold text-gray-950">
+                      ₦
+                      {Number(
+                        item.unitPrice || 0
+                      ).toLocaleString("en-NG")}
+                    </p>
+
+                    <p className="text-right text-xs font-extrabold text-gray-950">
+                      ₦
+                      {itemTotal(item).toLocaleString(
+                        "en-NG"
+                      )}
+                    </p>
+
+                  </div>
+
+                ))}
 
               </div>
 
@@ -462,57 +437,48 @@ export default function ReceiptPage() {
                 TOTALS
             ========================= */}
 
-            <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
+            <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
 
-              <div className="ml-auto w-full max-w-md space-y-5">
+              <div className="ml-auto w-full max-w-sm space-y-3">
 
-                {/* TOTAL AMOUNT */}
+                <div className="flex items-center justify-between gap-4">
 
-                <div className="flex items-center justify-between gap-5">
-
-                  <span className="text-base font-bold text-gray-800 sm:text-lg">
+                  <span className="text-sm font-bold text-gray-700 sm:text-base">
                     Total Amount
                   </span>
 
-                  <span className="whitespace-nowrap text-lg font-extrabold text-gray-950 sm:text-xl">
+                  <span className="text-base font-extrabold text-gray-950 sm:text-lg">
                     ₦
-                    {grandTotal.toLocaleString(
+                    {totalAmount.toLocaleString(
                       "en-NG"
                     )}
                   </span>
 
                 </div>
 
-                {/* AMOUNT PAID */}
+                <div className="flex items-center justify-between gap-4">
 
-                <div className="flex items-center justify-between gap-5">
-
-                  <span className="text-base font-bold text-gray-800 sm:text-lg">
+                  <span className="text-sm font-bold text-gray-700 sm:text-base">
                     Amount Paid
                   </span>
 
-                  <span className="whitespace-nowrap text-lg font-extrabold text-gray-950 sm:text-xl">
+                  <span className="text-base font-extrabold text-gray-950 sm:text-lg">
                     ₦
-                    {amountPaid.toLocaleString(
+                    {totalAmount.toLocaleString(
                       "en-NG"
                     )}
                   </span>
 
                 </div>
 
-                {/* BALANCE */}
+                <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-3">
 
-                <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5">
-
-                  <span className="text-base font-extrabold text-gray-800 sm:text-lg">
+                  <span className="text-sm font-extrabold text-gray-700 sm:text-base">
                     Balance Due
                   </span>
 
-                  <span className="whitespace-nowrap text-lg font-extrabold text-red-600 sm:text-xl">
-                    ₦
-                    {balanceDue.toLocaleString(
-                      "en-NG"
-                    )}
+                  <span className="text-base font-extrabold text-red-600 sm:text-lg">
+                    ₦0
                   </span>
 
                 </div>
@@ -525,13 +491,13 @@ export default function ReceiptPage() {
                 FOOTER
             ========================= */}
 
-            <div className="px-5 py-7 text-center sm:px-10 sm:py-9">
+            <div className="px-5 py-4 text-center sm:px-7 sm:py-5">
 
-              <p className="text-base font-extrabold text-gray-900 sm:text-lg">
+              <p className="text-base font-extrabold text-gray-950 sm:text-lg">
                 Thank you for your patronage.
               </p>
 
-              <p className="mt-1 text-sm font-semibold text-gray-600">
+              <p className="mt-1 text-xs font-semibold text-gray-600 sm:text-sm">
                 Generated with BizzBill
               </p>
 
@@ -543,22 +509,20 @@ export default function ReceiptPage() {
               ACTION BUTTONS
           ========================= */}
 
-          <div className="no-print mx-auto mt-5 grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mx-auto mt-4 grid w-[calc(100%-8px)] max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2 print:hidden">
 
             <button
               type="button"
               onClick={saveAsImage}
-              className="rounded-xl bg-blue-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-blue-700"
+              className="rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 sm:text-base"
             >
               🖼 Save Receipt as PNG
             </button>
 
             <button
               type="button"
-              onClick={() =>
-                window.print()
-              }
-              className="rounded-xl bg-gray-900 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-gray-950"
+              onClick={() => window.print()}
+              className="rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-gray-950 sm:text-base"
             >
               🖨 Print Receipt
             </button>
@@ -566,28 +530,49 @@ export default function ReceiptPage() {
           </div>
 
         </main>
+
+        {/* PRINT STYLES */}
+
+        <style jsx global>{`
+          @media print {
+            @page {
+              size: auto;
+              margin: 8mm;
+            }
+
+            html,
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+            }
+
+            body {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+        `}</style>
       </>
     );
   }
 
-  /* ==================================================
+  /* =========================
      RECEIPT FORM
-  ================================================== */
+  ========================= */
 
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
 
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto max-w-4xl">
 
-        {/* =========================
-            HEADER
-        ========================= */}
+        {/* HEADER */}
 
         <div className="mb-6 flex items-center justify-between gap-3">
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-900 shadow-sm transition hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-sm hover:bg-gray-50"
           >
             ← Home
           </Link>
@@ -598,9 +583,7 @@ export default function ReceiptPage() {
 
         </div>
 
-        {/* =========================
-            FORM
-        ========================= */}
+        {/* FORM */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
 
@@ -608,35 +591,29 @@ export default function ReceiptPage() {
             Receipt Details
           </h2>
 
-          {/* =========================
-              BASIC DETAILS
-          ========================= */}
+          {/* BUSINESS */}
+
+          <div className="mb-5">
+
+            <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              Business name
+            </label>
+
+            <input
+              type="text"
+              value={businessName}
+              onChange={(e) =>
+                setBusinessName(e.target.value)
+              }
+              placeholder="Business name"
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+
+          </div>
+
+          {/* CUSTOMER / RECEIPT / DATE */}
 
           <div className="grid gap-5 sm:grid-cols-2">
-
-            {/* BUSINESS NAME */}
-
-            <div>
-
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
-                Business name
-              </label>
-
-              <input
-                type="text"
-                value={businessName}
-                onChange={(e) =>
-                  setBusinessName(
-                    e.target.value
-                  )
-                }
-                placeholder="Business name"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
-            {/* CUSTOMER NAME */}
 
             <div>
 
@@ -648,17 +625,13 @@ export default function ReceiptPage() {
                 type="text"
                 value={customerName}
                 onChange={(e) =>
-                  setCustomerName(
-                    e.target.value
-                  )
+                  setCustomerName(e.target.value)
                 }
                 placeholder="Customer name"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
-
-            {/* RECEIPT NUMBER */}
 
             <div>
 
@@ -670,31 +643,25 @@ export default function ReceiptPage() {
                 type="text"
                 value={receiptNumber}
                 onChange={(e) =>
-                  setReceiptNumber(
-                    e.target.value
-                  )
+                  setReceiptNumber(e.target.value)
                 }
                 placeholder="Receipt number"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
 
-            {/* DATE */}
-
             <div>
 
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
-                Date
+                Receipt date
               </label>
 
               <input
                 type="date"
                 value={receiptDate}
                 onChange={(e) =>
-                  setReceiptDate(
-                    e.target.value
-                  )
+                  setReceiptDate(e.target.value)
                 }
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
@@ -703,9 +670,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              ITEMS
-          ========================= */}
+          {/* ITEMS */}
 
           <div className="mt-8">
 
@@ -718,7 +683,7 @@ export default function ReceiptPage() {
               <button
                 type="button"
                 onClick={addItem}
-                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700"
+                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-blue-700"
               >
                 + Add Item
               </button>
@@ -727,19 +692,20 @@ export default function ReceiptPage() {
 
             <div className="space-y-4">
 
-              {items.map(
-                (item, index) => (
+              {items.map((item, index) => (
 
-                  <div
-                    key={index}
-                    className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
-                  >
+                <div
+                  key={index}
+                  className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
+                >
+
+                  <div className="grid gap-4 sm:grid-cols-3">
 
                     {/* ITEM */}
 
                     <div>
 
-                      <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
                         Item / Service
                       </label>
 
@@ -754,137 +720,129 @@ export default function ReceiptPage() {
                           )
                         }
                         placeholder="Item / Service"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
                       />
 
                     </div>
 
-                    {/* QUANTITY + PRICE */}
+                    {/* QUANTITY */}
 
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
 
-                      {/* QUANTITY */}
+                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                        Quantity
+                      </label>
 
-                      <div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={
+                          item.quantity === 0
+                            ? ""
+                            : item.quantity
+                        }
+                        onChange={(e) => {
+                          const value =
+                            e.target.value;
 
-                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
-                          Quantity
-                        </label>
-
-                        <input
-                          type="number"
-                          min="1"
-                          value={
-                            item.quantity
-                          }
-                          onChange={(e) => {
-
-                            const value =
-                              e.target.value;
-
-                            updateItem(
-                              index,
-                              "quantity",
-                              value === ""
-                                ? ""
-                                : Number(value)
-                            );
-
-                          }}
-                          placeholder="Quantity"
-                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
-                        />
-
-                      </div>
-
-                      {/* UNIT PRICE */}
-
-                      <div>
-
-                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
-                          Unit price
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0"
-                          value={
-                            item.unitPrice || ""
-                          }
-                          onChange={(e) =>
-                            updateItem(
-                              index,
-                              "unitPrice",
-                              e.target.value === ""
-                                ? 0
-                                : Number(
-                                    e.target
-                                      .value
-                                  )
-                            )
-                          }
-                          placeholder="₦0"
-                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
-                        />
-
-                      </div>
+                          updateItem(
+                            index,
+                            "quantity",
+                            value === ""
+                              ? 0
+                              : Number(value)
+                          );
+                        }}
+                        placeholder="Enter quantity"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
+                      />
 
                     </div>
 
-                    {/* ITEM TOTAL */}
+                    {/* UNIT PRICE */}
 
-                    <div className="mt-4 flex items-center justify-between gap-4">
+                    <div>
 
-                      <p className="text-sm font-extrabold text-gray-900 sm:text-base">
-                        Item total: ₦
-                        {itemTotal(
-                          item
-                        ).toLocaleString(
-                          "en-NG"
-                        )}
-                      </p>
+                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                        Unit price
+                      </label>
 
-                      {items.length >
-                        1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            removeItem(
-                              index
-                            )
-                          }
-                          className="text-sm font-extrabold text-red-600 transition hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      )}
+                      <input
+                        type="number"
+                        min="0"
+                        value={
+                          item.unitPrice === 0
+                            ? ""
+                            : item.unitPrice
+                        }
+                        onChange={(e) => {
+                          const value =
+                            e.target.value;
+
+                          updateItem(
+                            index,
+                            "unitPrice",
+                            value === ""
+                              ? 0
+                              : Number(value)
+                          );
+                        }}
+                        placeholder="₦0"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
+                      />
 
                     </div>
 
                   </div>
 
-                )
-              )}
+                  {/* ITEM TOTAL */}
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+
+                    <p className="text-sm font-extrabold text-gray-900 sm:text-base">
+                      Item total: ₦
+                      {itemTotal(item).toLocaleString(
+                        "en-NG"
+                      )}
+                    </p>
+
+                    {items.length > 1 && (
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeItem(index)
+                        }
+                        className="text-sm font-extrabold text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+
+                    )}
+
+                  </div>
+
+                </div>
+
+              ))}
 
             </div>
 
           </div>
 
-          {/* =========================
-              TOTAL AMOUNT
-          ========================= */}
+          {/* TOTAL */}
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
-            <div className="flex items-center justify-between gap-5">
+            <div className="flex items-center justify-between gap-4">
 
               <span className="text-base font-extrabold text-gray-900">
                 Total Amount
               </span>
 
-              <span className="whitespace-nowrap text-xl font-extrabold text-gray-950">
+              <span className="text-xl font-extrabold text-gray-950">
                 ₦
-                {grandTotal.toLocaleString(
+                {totalAmount.toLocaleString(
                   "en-NG"
                 )}
               </span>
@@ -893,22 +851,19 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              PAYMENT INFO
-          ========================= */}
+          {/* PAYMENT METHOD */}
 
           <div className="mt-8">
 
             <label className="mb-2 block text-sm font-extrabold text-gray-900">
-              Payment info
+              Payment method
             </label>
 
             <select
               value={paymentMethod}
               onChange={(e) =>
                 setPaymentMethod(
-                  e.target
-                    .value as PaymentMethod
+                  e.target.value as PaymentMethod
                 )
               }
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -926,80 +881,15 @@ export default function ReceiptPage() {
                 Card
               </option>
 
-              <option value="Other">
-                Other
+              <option value="Mobile Money">
+                Mobile Money
               </option>
 
             </select>
 
           </div>
 
-          {/* =========================
-              AMOUNT PAID
-          ========================= */}
-
-          <div className="mt-5">
-
-            <label className="mb-2 block text-sm font-extrabold text-gray-900">
-              Amount paid
-            </label>
-
-            <input
-              type="number"
-              min="0"
-              max={grandTotal}
-              value={
-                amountPaid || ""
-              }
-              onChange={(e) => {
-
-                const value =
-                  e.target.value;
-
-                if (value === "") {
-                  setAmountPaid(0);
-                  return;
-                }
-
-                setAmountPaid(
-                  Math.min(
-                    Math.max(
-                      Number(value),
-                      0
-                    ),
-                    grandTotal
-                  )
-                );
-
-              }}
-              placeholder="₦0"
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            />
-
-          </div>
-
-          {/* =========================
-              BALANCE DUE
-          ========================= */}
-
-          <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-red-50 p-4">
-
-            <span className="font-extrabold text-gray-800">
-              Balance Due
-            </span>
-
-            <span className="whitespace-nowrap font-extrabold text-red-600">
-              ₦
-              {balanceDue.toLocaleString(
-                "en-NG"
-              )}
-            </span>
-
-          </div>
-
-          {/* =========================
-              GENERATE
-          ========================= */}
+          {/* GENERATE */}
 
           <button
             type="button"
