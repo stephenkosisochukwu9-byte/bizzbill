@@ -135,32 +135,38 @@ export default function InvoicePage() {
      SAVE AS PNG
   ========================= */
 
-  const saveAsImage = async () => {
-    if (!invoiceRef.current) return;
+ const saveAsImage = async () => {
+  if (!invoiceRef.current) return;
 
-    try {
-      const dataUrl = await toPng(invoiceRef.current, {
-        quality: 1,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        cacheBust: true,
-      });
+  try {
+    const element = invoiceRef.current;
 
-      const link = document.createElement("a");
+    const dataUrl = await toPng(element, {
+      width: element.scrollWidth,
+      height: element.scrollHeight,
+      pixelRatio: 2,
+      quality: 1,
+      backgroundColor: "#ffffff",
+      cacheBust: true,
+    });
 
-      link.download = `Invoice-${invoiceNumber || "invoice"}.png`;
+    const link = document.createElement("a");
 
-      link.href = dataUrl;
+    link.download = `Invoice-${invoiceNumber || "invoice"}.png`;
 
-      link.click();
-    } catch (error) {
-      console.error(error);
+    link.href = dataUrl;
 
-      alert(
-        "Unable to save the invoice as an image. Please try again."
-      );
-    }
-  };
+    link.click();
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      "Unable to save the invoice as an image. Please try again."
+    );
+  }
+};
+
+
 
   /* =========================
      GENERATED INVOICE
@@ -221,10 +227,15 @@ export default function InvoicePage() {
           ========================= */}
 
           <div
-            ref={invoiceRef}
-            data-print-invoice
-            className="mx-auto box-border w-full max-w-4xl overflow-hidden rounded-2xl bg-white text-gray-950 shadow-lg"
-          >
+  ref={invoiceRef}
+  style={{
+    width: "720px",
+    maxWidth: "100%",
+  }}
+  className="mx-auto overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
+>
+
+
             {/* HEADER */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
@@ -430,7 +441,7 @@ export default function InvoicePage() {
 
             <div className="px-5 py-7 text-center sm:px-10 sm:py-9">
               <p className="text-base font-extrabold text-gray-900 sm:text-lg">
-                Thank you for your patronage.
+                Thank you for your business.
               </p>
 
               <p className="mt-1 text-sm font-semibold text-gray-600">
