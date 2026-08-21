@@ -10,56 +10,32 @@ type Item = {
   unitPrice: number;
 };
 
-type PaymentMethod =
-  | "Cash"
-  | "Bank Transfer"
-  | "Card"
-  | "Mobile Money";
-
 export default function ReceiptPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const [generated, setGenerated] = useState(false);
 
-  const [businessName, setBusinessName] = useState("BizzBill");
-  const [customerName, setCustomerName] = useState("");
-  const [receiptNumber, setReceiptNumber] = useState("");
-  const [receiptDate, setReceiptDate] = useState("");
+  const [businessName, setBusinessName] =
+    useState("BizzBill");
+
+  const [customerName, setCustomerName] =
+    useState("");
+
+  const [receiptNumber, setReceiptNumber] =
+    useState("");
+
+  const [date, setDate] = useState("");
 
   const [paymentMethod, setPaymentMethod] =
-    useState<PaymentMethod>("Cash");
+    useState("Cash");
 
   const [items, setItems] = useState<Item[]>([
     {
       name: "",
-      quantity: 0,
+      quantity: 1,
       unitPrice: 0,
     },
   ]);
-
-  /* =========================
-     ITEM TOTAL
-  ========================= */
-
-  const itemTotal = (item: Item) => {
-    return (
-      Number(item.quantity || 0) *
-      Number(item.unitPrice || 0)
-    );
-  };
-
-  /* =========================
-     TOTAL AMOUNT
-  ========================= */
-
-  const totalAmount = items.reduce(
-    (total, item) => total + itemTotal(item),
-    0
-  );
-
-  /* =========================
-     UPDATE ITEM
-  ========================= */
 
   const updateItem = (
     index: number,
@@ -78,24 +54,16 @@ export default function ReceiptPage() {
     );
   };
 
-  /* =========================
-     ADD ITEM
-  ========================= */
-
   const addItem = () => {
     setItems((current) => [
       ...current,
       {
         name: "",
-        quantity: 0,
+        quantity: 1,
         unitPrice: 0,
       },
     ]);
   };
-
-  /* =========================
-     REMOVE ITEM
-  ========================= */
 
   const removeItem = (index: number) => {
     if (items.length === 1) return;
@@ -105,9 +73,14 @@ export default function ReceiptPage() {
     );
   };
 
-  /* =========================
-     GENERATE RECEIPT
-  ========================= */
+  const itemTotal = (item: Item) =>
+    Number(item.quantity || 0) *
+    Number(item.unitPrice || 0);
+
+  const totalAmount = items.reduce(
+    (total, item) => total + itemTotal(item),
+    0
+  );
 
   const generateReceipt = () => {
     if (!businessName.trim()) {
@@ -125,24 +98,11 @@ export default function ReceiptPage() {
       return;
     }
 
-    if (!receiptDate) {
-      alert("Please select receipt date.");
+    if (!date) {
+      alert("Please select date.");
       return;
     }
 
-    const validItems = items.filter(
-      (item) =>
-        item.name.trim() !== "" &&
-        Number(item.quantity) > 0 &&
-        Number(item.unitPrice) >= 0
-    );
-
-    if (validItems.length === 0) {
-      alert("Please add at least one valid item.");
-      return;
-    }
-
-    setItems(validItems);
     setGenerated(true);
 
     setTimeout(() => {
@@ -153,10 +113,6 @@ export default function ReceiptPage() {
     }, 100);
   };
 
-  /* =========================
-     SAVE RECEIPT AS PNG
-  ========================= */
-
   const saveAsImage = async () => {
     if (!receiptRef.current) return;
 
@@ -165,486 +121,309 @@ export default function ReceiptPage() {
         quality: 1,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
-        cacheBust: true,
       });
 
       const link = document.createElement("a");
 
-      link.download = `Receipt-${
-        receiptNumber || "receipt"
-      }.png`;
+      link.download = `Receipt-${receiptNumber || "receipt"}.png`;
 
       link.href = dataUrl;
 
       link.click();
     } catch (error) {
       console.error(error);
-
-      alert(
-        "Unable to save the receipt as an image. Please try again."
-      );
+      alert("Unable to save the receipt as an image. Please try again.");
     }
   };
 
-  /* =====================================================
-     GENERATED RECEIPT
-  ===================================================== */
-
   if (generated) {
     return (
-      <>
-        <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-8 print:bg-white print:p-0">
+      <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
 
-          {/* TOP BUTTONS */}
+        {/* TOP */}
 
-          <div className="mx-auto mb-4 flex w-full max-w-2xl items-center justify-between gap-3 print:hidden">
-
-            <Link
-              href="/"
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-950 shadow-sm hover:bg-gray-50 sm:px-4"
-            >
-              ← Home
-            </Link>
-
-            <button
-              type="button"
-              onClick={() => setGenerated(false)}
-              className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50 sm:px-4"
-            >
-              Edit Receipt
-            </button>
-
-          </div>
-
-          {/* RECEIPT */}
-
-          <div
-            ref={receiptRef}
-            className="
-              mx-auto
-              w-full
-              max-w-2xl
-              overflow-hidden
-              rounded-xl
-              bg-white
-              text-gray-950
-              shadow-md
-              print:w-full
-              print:max-w-none
-              print:rounded-none
-              print:shadow-none
-            "
-          >
-
-            {/* =========================
-                RECEIPT HEADER
-            ========================= */}
-
-            <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
-
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-
-                {/* BUSINESS */}
-
-                <div className="min-w-0">
-
-                  <h1 className="break-words text-2xl font-extrabold tracking-tight text-gray-950 sm:text-3xl">
-                    {businessName}
-                  </h1>
-
-                  <p className="mt-1 text-sm font-semibold text-gray-700 sm:text-base">
-                    Payment Receipt
-                  </p>
-
-                </div>
-
-                {/* RECEIPT INFO */}
-
-                <div className="sm:text-right">
-
-                  <h2 className="text-2xl font-extrabold text-gray-950 sm:text-3xl">
-                    RECEIPT
-                  </h2>
-
-                  <div className="mt-2 space-y-1 text-sm text-gray-700">
-
-                    <p>
-                      Receipt No:{" "}
-                      <span className="font-extrabold text-gray-950">
-                        {receiptNumber}
-                      </span>
-                    </p>
-
-                    <p>
-                      Date:{" "}
-                      <span className="font-extrabold text-gray-950">
-                        {receiptDate}
-                      </span>
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* =========================
-                CUSTOMER + PAYMENT
-            ========================= */}
-
-            <div className="grid grid-cols-1 gap-5 border-b border-gray-200 px-5 py-5 sm:grid-cols-2 sm:px-7 sm:py-6">
-
-              <div>
-
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
-                  Received From
-                </p>
-
-                <p className="mt-1 break-words text-lg font-extrabold text-gray-950 sm:text-xl">
-                  {customerName}
-                </p>
-
-              </div>
-
-              <div className="sm:text-right">
-
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
-                  Payment Method
-                </p>
-
-                <p className="mt-1 break-words text-lg font-extrabold text-blue-600 sm:text-xl">
-                  {paymentMethod}
-                </p>
-
-              </div>
-
-            </div>
-
-            {/* =========================
-                ITEMS
-            ========================= */}
-
-            <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
-
-              {/* DESKTOP */}
-
-              <div className="hidden sm:block">
-
-                <table className="w-full table-fixed">
-
-                  <thead>
-
-                    <tr className="border-b-2 border-gray-300">
-
-                      <th className="w-[40%] pb-3 text-left text-sm font-extrabold text-gray-950">
-                        Item / Service
-                      </th>
-
-                      <th className="w-[15%] pb-3 text-center text-sm font-extrabold text-gray-950">
-                        Qty
-                      </th>
-
-                      <th className="w-[22%] pb-3 text-right text-sm font-extrabold text-gray-950">
-                        Unit Price
-                      </th>
-
-                      <th className="w-[23%] pb-3 text-right text-sm font-extrabold text-gray-950">
-                        Total
-                      </th>
-
-                    </tr>
-
-                  </thead>
-
-                  <tbody>
-
-                    {items.map((item, index) => (
-
-                      <tr
-                        key={index}
-                        className="border-b border-gray-100 last:border-b-0"
-                      >
-
-                        <td className="break-words py-3 pr-2 text-left text-sm font-bold text-gray-950">
-                          {item.name}
-                        </td>
-
-                        <td className="py-3 text-center text-sm font-bold text-gray-950">
-                          {item.quantity}
-                        </td>
-
-                        <td className="py-3 text-right text-sm font-bold text-gray-950">
-                          ₦
-                          {Number(
-                            item.unitPrice
-                          ).toLocaleString("en-NG")}
-                        </td>
-
-                        <td className="py-3 text-right text-sm font-extrabold text-gray-950">
-                          ₦
-                          {itemTotal(item).toLocaleString(
-                            "en-NG"
-                          )}
-                        </td>
-
-                      </tr>
-
-                    ))}
-
-                  </tbody>
-
-                </table>
-
-              </div>
-
-              {/* MOBILE */}
-
-              <div className="space-y-3 sm:hidden">
-
-                <div className="grid grid-cols-[1fr_45px_85px_85px] gap-2 border-b-2 border-gray-300 pb-3">
-
-                  <p className="text-xs font-extrabold text-gray-950">
-                    Item / Service
-                  </p>
-
-                  <p className="text-center text-xs font-extrabold text-gray-950">
-                    Qty
-                  </p>
-
-                  <p className="text-right text-xs font-extrabold text-gray-950">
-                    Unit Price
-                  </p>
-
-                  <p className="text-right text-xs font-extrabold text-gray-950">
-                    Total
-                  </p>
-
-                </div>
-
-                {items.map((item, index) => (
-
-                  <div
-                    key={index}
-                    className="grid grid-cols-[1fr_45px_85px_85px] items-center gap-2 border-b border-gray-100 py-3 last:border-b-0"
-                  >
-
-                    <p className="min-w-0 break-words text-xs font-bold text-gray-950">
-                      {item.name}
-                    </p>
-
-                    <p className="text-center text-xs font-bold text-gray-950">
-                      {item.quantity}
-                    </p>
-
-                    <p className="text-right text-xs font-bold text-gray-950">
-                      ₦
-                      {Number(
-                        item.unitPrice
-                      ).toLocaleString("en-NG")}
-                    </p>
-
-                    <p className="text-right text-xs font-extrabold text-gray-950">
-                      ₦
-                      {itemTotal(item).toLocaleString(
-                        "en-NG"
-                      )}
-                    </p>
-
-                  </div>
-
-                ))}
-
-              </div>
-
-            </div>
-
-            {/* =========================
-                TOTAL
-            ========================= */}
-
-            <div className="border-b border-gray-200 px-5 py-5 sm:px-7 sm:py-6">
-
-              <div className="ml-auto w-full max-w-sm">
-
-                <div className="flex items-center justify-between gap-4">
-
-                  <span className="text-sm font-extrabold text-gray-700 sm:text-base">
-                    Total Amount
-                  </span>
-
-                  <span className="text-base font-extrabold text-gray-950 sm:text-lg">
-                    ₦
-                    {totalAmount.toLocaleString(
-                      "en-NG"
-                    )}
-                  </span>
-
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-4">
-
-                  <span className="text-sm font-extrabold text-gray-700 sm:text-base">
-                    Amount Paid
-                  </span>
-
-                  <span className="text-base font-extrabold text-gray-950 sm:text-lg">
-                    ₦
-                    {totalAmount.toLocaleString(
-                      "en-NG"
-                    )}
-                  </span>
-
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-4 border-t border-gray-200 pt-3">
-
-                  <span className="text-sm font-extrabold text-gray-700 sm:text-base">
-                    Balance Due
-                  </span>
-
-                  <span className="text-base font-extrabold text-red-600 sm:text-lg">
-                    ₦0
-                  </span>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* =========================
-                FOOTER
-            ========================= */}
-
-            <div className="px-5 py-4 text-center sm:px-7 sm:py-5">
-
-              <p className="text-base font-extrabold text-gray-950 sm:text-lg">
-                Thank you for your business.
-              </p>
-
-              <p className="mt-1 text-xs font-semibold text-gray-600 sm:text-sm">
-                Generated with BizzBill
-              </p>
-
-            </div>
-
-          </div>
-
-          {/* =========================
-              ACTION BUTTONS
-          ========================= */}
-
-          <div className="mx-auto mt-4 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2 print:hidden">
-
-            <button
-              type="button"
-              onClick={saveAsImage}
-              className="rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700 sm:text-base"
-            >
-              🖼 Save Receipt as PNG
-            </button>
-
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm hover:bg-gray-950 sm:text-base"
-            >
-              🖨 Print Receipt
-            </button>
-
-          </div>
-
-        </main>
-
-        {/* PRINT CSS */}
-
-        <style jsx global>{`
-          @media print {
-            @page {
-              size: auto;
-              margin: 8mm;
-            }
-
-            html,
-            body {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: #ffffff !important;
-            }
-
-            body {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-          }
-        `}</style>
-      </>
-    );
-  }
-
-  /* =====================================================
-     RECEIPT FORM
-  ===================================================== */
-
-  return (
-    <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
-
-      <div className="mx-auto max-w-4xl">
-
-        {/* HEADER */}
-
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mx-auto mb-5 flex max-w-5xl flex-wrap items-center justify-between gap-3">
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-950 shadow-sm hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
           >
             ← Home
           </Link>
 
-          <h1 className="text-xl font-extrabold text-gray-950 sm:text-2xl">
+          <button
+            type="button"
+            onClick={() => setGenerated(false)}
+            className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+          >
+            Edit Receipt
+          </button>
+
+        </div>
+
+        {/* RECEIPT */}
+
+        <div
+          ref={receiptRef}
+          className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-white shadow-lg"
+        >
+
+          {/* HEADER */}
+
+          <div className="border-b border-gray-200 px-6 py-8 text-center sm:px-10">
+
+            <h1 className="text-3xl font-bold text-gray-900">
+              {businessName}
+            </h1>
+
+            <p className="mt-2 font-semibold text-blue-600">
+              Payment Receipt
+            </p>
+
+          </div>
+
+          {/* RECEIPT INFO */}
+
+          <div className="grid gap-6 border-b border-gray-200 px-6 py-7 sm:grid-cols-2 sm:px-10">
+
+            <div>
+
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                Receipt No
+              </p>
+
+              <p className="mt-2 text-lg font-bold text-gray-900">
+                {receiptNumber}
+              </p>
+
+            </div>
+
+            <div className="sm:text-right">
+
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                Date
+              </p>
+
+              <p className="mt-2 text-lg font-bold text-gray-900">
+                {date}
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* CUSTOMER */}
+
+          <div className="border-b border-gray-200 px-6 py-7 sm:px-10">
+
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              Received From
+            </p>
+
+            <p className="mt-2 text-xl font-bold text-gray-900">
+              {customerName}
+            </p>
+
+          </div>
+
+          {/* ITEMS */}
+
+          <div className="overflow-x-auto px-6 py-7 sm:px-10">
+
+            <table className="w-full min-w-[600px]">
+
+              <thead>
+
+                <tr className="border-b border-gray-300 text-left">
+
+                  <th className="pb-4 font-bold text-gray-700">
+                    Item / Service
+                  </th>
+
+                  <th className="pb-4 text-center font-bold text-gray-700">
+                    Qty
+                  </th>
+
+                  <th className="pb-4 text-right font-bold text-gray-700">
+                    Unit Price
+                  </th>
+
+                  <th className="pb-4 text-right font-bold text-gray-700">
+                    Total
+                  </th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {items.map((item, index) => (
+
+                  <tr
+                    key={index}
+                    className="border-b border-gray-100"
+                  >
+
+                    <td className="py-4 font-medium text-gray-900">
+                      {item.name || "Item / Service"}
+                    </td>
+
+                    <td className="py-4 text-center text-gray-900">
+                      {item.quantity}
+                    </td>
+
+                    <td className="py-4 text-right text-gray-900">
+                      ₦
+                      {Number(item.unitPrice).toLocaleString(
+                        "en-NG"
+                      )}
+                    </td>
+
+                    <td className="py-4 text-right font-bold text-gray-900">
+                      ₦
+                      {itemTotal(item).toLocaleString(
+                        "en-NG"
+                      )}
+                    </td>
+
+                  </tr>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+          {/* TOTAL */}
+
+          <div className="border-t border-gray-200 px-6 py-7 sm:px-10">
+
+            <div className="ml-auto max-w-md space-y-4">
+
+              <div className="flex justify-between">
+
+                <span className="font-bold text-gray-700">
+                  Total Amount
+                </span>
+
+                <span className="text-xl font-bold text-gray-900">
+                  ₦
+                  {totalAmount.toLocaleString("en-NG")}
+                </span>
+
+              </div>
+
+              <div className="flex justify-between border-t border-gray-200 pt-4">
+
+                <span className="font-bold text-gray-700">
+                  Payment Method
+                </span>
+
+                <span className="font-bold text-blue-700">
+                  {paymentMethod}
+                </span>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* FOOTER */}
+
+          <div className="border-t border-gray-200 px-6 py-7 text-center sm:px-10">
+
+            <p className="font-semibold text-gray-800">
+              Thank you for your payment.
+            </p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Generated with BizzBill
+            </p>
+
+          </div>
+
+        </div>
+
+        {/* ACTIONS */}
+
+        <div className="mx-auto mt-5 grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2">
+
+          <button
+            type="button"
+            onClick={saveAsImage}
+            className="rounded-xl bg-blue-600 px-5 py-4 font-bold text-white hover:bg-blue-700"
+          >
+            🖼 Save Receipt as PNG
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-xl bg-gray-800 px-5 py-4 font-bold text-white hover:bg-gray-900"
+          >
+            🖨 Print Receipt
+          </button>
+
+        </div>
+
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
+
+      <div className="mx-auto max-w-5xl">
+
+        {/* HEADER */}
+
+        <div className="mb-6 flex items-center justify-between">
+
+          <Link
+            href="/"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
+          >
+            ← Home
+          </Link>
+
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
             Create Receipt
           </h1>
 
         </div>
 
-        {/* FORM */}
-
         <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
 
-          <h2 className="mb-6 text-2xl font-extrabold text-gray-950">
+          <h2 className="mb-6 text-2xl font-bold text-gray-900">
             Receipt Details
           </h2>
 
-          {/* BUSINESS NAME */}
-
-          <div className="mb-5">
-
-            <label className="mb-2 block text-sm font-extrabold text-gray-950">
-              Business name
-            </label>
-
-            <input
-              type="text"
-              value={businessName}
-              onChange={(e) =>
-                setBusinessName(e.target.value)
-              }
-              placeholder="Business name"
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            />
-
-          </div>
-
-          {/* CUSTOMER / RECEIPT / DATE */}
+          {/* BASIC INFO */}
 
           <div className="grid gap-5 sm:grid-cols-2">
 
             <div>
+              <label className="mb-2 block text-sm font-bold text-gray-800">
+                Business name
+              </label>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-950">
+              <input
+                type="text"
+                value={businessName}
+                onChange={(e) =>
+                  setBusinessName(e.target.value)
+                }
+                placeholder="Business name"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-gray-800">
                 Customer name
               </label>
 
@@ -655,14 +434,12 @@ export default function ReceiptPage() {
                   setCustomerName(e.target.value)
                 }
                 placeholder="Customer name"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
             <div>
-
-              <label className="mb-2 block text-sm font-extrabold text-gray-950">
+              <label className="mb-2 block text-sm font-bold text-gray-800">
                 Receipt number
               </label>
 
@@ -673,26 +450,23 @@ export default function ReceiptPage() {
                   setReceiptNumber(e.target.value)
                 }
                 placeholder="Receipt number"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
             <div>
-
-              <label className="mb-2 block text-sm font-extrabold text-gray-950">
-                Receipt date
+              <label className="mb-2 block text-sm font-bold text-gray-800">
+                Date
               </label>
 
               <input
                 type="date"
-                value={receiptDate}
+                value={date}
                 onChange={(e) =>
-                  setReceiptDate(e.target.value)
+                  setDate(e.target.value)
                 }
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
           </div>
@@ -703,14 +477,14 @@ export default function ReceiptPage() {
 
             <div className="mb-4 flex items-center justify-between gap-3">
 
-              <h2 className="text-2xl font-extrabold text-gray-950">
+              <h2 className="text-2xl font-bold text-gray-900">
                 Items
               </h2>
 
               <button
                 type="button"
                 onClick={addItem}
-                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-blue-700"
+                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"
               >
                 + Add Item
               </button>
@@ -728,11 +502,8 @@ export default function ReceiptPage() {
 
                   <div className="grid gap-4 sm:grid-cols-3">
 
-                    {/* ITEM */}
-
                     <div>
-
-                      <label className="mb-2 block text-sm font-extrabold text-gray-950">
+                      <label className="mb-2 block text-sm font-bold text-gray-700">
                         Item / Service
                       </label>
 
@@ -747,90 +518,56 @@ export default function ReceiptPage() {
                           )
                         }
                         placeholder="Item / Service"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none"
                       />
-
                     </div>
 
-                    {/* QUANTITY */}
-
                     <div>
-
-                      <label className="mb-2 block text-sm font-extrabold text-gray-950">
+                      <label className="mb-2 block text-sm font-bold text-gray-700">
                         Quantity
                       </label>
 
                       <input
                         type="number"
-                        min="0"
-                        value={
-                          item.quantity === 0
-                            ? ""
-                            : item.quantity
-                        }
-                        onChange={(e) => {
-
-                          const value =
-                            e.target.value;
-
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) =>
                           updateItem(
                             index,
                             "quantity",
-                            value === ""
-                              ? 0
-                              : Number(value)
-                          );
-
-                        }}
-                        placeholder="Enter quantity"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
+                            Number(e.target.value)
+                          )
+                        }
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-medium text-gray-900 focus:border-blue-600 focus:outline-none"
                       />
-
                     </div>
 
-                    {/* UNIT PRICE */}
-
                     <div>
-
-                      <label className="mb-2 block text-sm font-extrabold text-gray-950">
+                      <label className="mb-2 block text-sm font-bold text-gray-700">
                         Unit price
                       </label>
 
                       <input
                         type="number"
                         min="0"
-                        value={
-                          item.unitPrice === 0
-                            ? ""
-                            : item.unitPrice
-                        }
-                        onChange={(e) => {
-
-                          const value =
-                            e.target.value;
-
+                        value={item.unitPrice || ""}
+                        onChange={(e) =>
                           updateItem(
                             index,
                             "unitPrice",
-                            value === ""
-                              ? 0
-                              : Number(value)
-                          );
-
-                        }}
+                            Number(e.target.value)
+                          )
+                        }
                         placeholder="₦0"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-600 focus:border-blue-600 focus:outline-none"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none"
                       />
-
                     </div>
 
                   </div>
 
-                  {/* ITEM TOTAL + REMOVE */}
+                  <div className="mt-4 flex items-center justify-between">
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
-
-                    <p className="text-sm font-extrabold text-gray-950 sm:text-base">
+                    <p className="font-bold text-gray-800">
                       Item total: ₦
                       {itemTotal(item).toLocaleString(
                         "en-NG"
@@ -838,17 +575,13 @@ export default function ReceiptPage() {
                     </p>
 
                     {items.length > 1 && (
-
                       <button
                         type="button"
-                        onClick={() =>
-                          removeItem(index)
-                        }
-                        className="text-sm font-extrabold text-red-600 hover:text-red-700"
+                        onClick={() => removeItem(index)}
+                        className="font-bold text-red-600 hover:text-red-700"
                       >
                         Remove
                       </button>
-
                     )}
 
                   </div>
@@ -865,17 +598,15 @@ export default function ReceiptPage() {
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex justify-between">
 
-              <span className="text-base font-extrabold text-gray-950">
+              <span className="font-bold text-gray-800">
                 Total Amount
               </span>
 
-              <span className="text-xl font-extrabold text-gray-950">
+              <span className="text-xl font-bold text-gray-900">
                 ₦
-                {totalAmount.toLocaleString(
-                  "en-NG"
-                )}
+                {totalAmount.toLocaleString("en-NG")}
               </span>
 
             </div>
@@ -886,18 +617,16 @@ export default function ReceiptPage() {
 
           <div className="mt-8">
 
-            <label className="mb-2 block text-sm font-extrabold text-gray-950">
-              Payment method
+            <label className="mb-2 block text-sm font-bold text-gray-800">
+              Payment info
             </label>
 
             <select
               value={paymentMethod}
               onChange={(e) =>
-                setPaymentMethod(
-                  e.target.value as PaymentMethod
-                )
+                setPaymentMethod(e.target.value)
               }
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
 
               <option value="Cash">
@@ -908,12 +637,16 @@ export default function ReceiptPage() {
                 Bank Transfer
               </option>
 
+              <option value="POS">
+                POS
+              </option>
+
               <option value="Card">
                 Card
               </option>
 
-              <option value="Mobile Money">
-                Mobile Money
+              <option value="Other">
+                Other
               </option>
 
             </select>
@@ -925,7 +658,7 @@ export default function ReceiptPage() {
           <button
             type="button"
             onClick={generateReceipt}
-            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm hover:bg-blue-700"
+            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-bold text-white shadow-sm hover:bg-blue-700"
           >
             Generate Receipt
           </button>
@@ -937,4 +670,3 @@ export default function ReceiptPage() {
     </main>
   );
 }
-
