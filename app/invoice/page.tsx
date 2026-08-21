@@ -627,7 +627,7 @@ export default function InvoicePage() {
                       <input
                         type="number"
                         min="1"
-                        value={item.quantity}
+                        value={item.quantity || ""}
                         onChange={(e) =>
                           updateItem(
                             index,
