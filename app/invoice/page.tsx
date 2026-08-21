@@ -1,75 +1,46 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toPng } from "html-to-image";
+import Link from "next/link";
 
-type PaymentStatus =
-  | "Paid"
-  | "Unpaid"
-  | "Partially Paid";
-
-type InvoiceItem = {
-  id: number;
+type Item = {
   name: string;
   quantity: number;
   unitPrice: number;
 };
 
 export default function InvoicePage() {
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const [generated, setGenerated] = useState(false);
+
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
 
-  const [items, setItems] = useState<InvoiceItem[]>([
+  const [paymentStatus, setPaymentStatus] =
+    useState<"Unpaid" | "Paid" | "Partially Paid">("Unpaid");
+
+  const [amountPaid, setAmountPaid] = useState<number>(0);
+
+  const [items, setItems] = useState<Item[]>([
     {
-      id: 1,
       name: "",
       quantity: 1,
       unitPrice: 0,
     },
   ]);
 
-  const [paymentStatus, setPaymentStatus] =
-    useState<PaymentStatus>("Unpaid");
-
-  const [amountPaid, setAmountPaid] = useState("");
-
-  const [generated, setGenerated] = useState(false);
-
-  /* =========================
-     ITEM FUNCTIONS
-  ========================= */
-
-  const addItem = () => {
-    setItems((current) => [
-      ...current,
-      {
-        id: Date.now(),
-        name: "",
-        quantity: 1,
-        unitPrice: 0,
-      },
-    ]);
-  };
-
-  const removeItem = (id: number) => {
-    if (items.length === 1) return;
-
-    setItems((current) =>
-      current.filter((item) => item.id !== id)
-    );
-  };
-
   const updateItem = (
-    id: number,
-    field: keyof InvoiceItem,
+    index: number,
+    field: keyof Item,
     value: string | number
   ) => {
     setItems((current) =>
-      current.map((item) =>
-        item.id === id
+      current.map((item, i) =>
+        i === index
           ? {
               ...item,
               [field]: value,
@@ -79,89 +50,52 @@ export default function InvoicePage() {
     );
   };
 
-  /* =========================
-     CALCULATIONS
-  ========================= */
-
-  const getItemTotal = (item: InvoiceItem) => {
-    return item.quantity * item.unitPrice;
+  const addItem = () => {
+    setItems((current) => [
+      ...current,
+      {
+        name: "",
+        quantity: 1,
+        unitPrice: 0,
+      },
+    ]);
   };
 
-  const subtotal = items.reduce(
-    (total, item) =>
-      total + getItemTotal(item),
+  const removeItem = (index: number) => {
+    if (items.length === 1) return;
+
+    setItems((current) =>
+      current.filter((_, i) => i !== index)
+    );
+  };
+
+  const itemTotal = (item: Item) =>
+    Number(item.quantity || 0) *
+    Number(item.unitPrice || 0);
+
+  const grandTotal = items.reduce(
+    (total, item) => total + itemTotal(item),
     0
   );
 
-  const grandTotal = subtotal;
-
-  const paidAmount =
-    paymentStatus === "Paid"
-      ? grandTotal
-      : paymentStatus === "Partially Paid"
-      ? Math.min(
-          Math.max(0, Number(amountPaid) || 0),
-          grandTotal
-        )
-      : 0;
-
   const balanceDue =
     paymentStatus === "Partially Paid"
-      ? Math.max(
-          0,
-          grandTotal - paidAmount
-        )
+      ? Math.max(grandTotal - amountPaid, 0)
       : 0;
-
-  /* =========================
-     GENERATE INVOICE
-  ========================= */
 
   const generateInvoice = () => {
     if (!customerName.trim()) {
-      alert("Please enter the customer name.");
-      return;
-    }
-
-    if (!customerPhone.trim()) {
-      alert("Please enter the customer phone.");
+      alert("Please enter customer name.");
       return;
     }
 
     if (!invoiceNumber.trim()) {
-      alert("Please enter the invoice number.");
+      alert("Please enter invoice number.");
       return;
     }
 
     if (!invoiceDate) {
-      alert("Please select the invoice date.");
-      return;
-    }
-
-    const invalidItem = items.some(
-      (item) =>
-        !item.name.trim() ||
-        item.quantity <= 0 ||
-        item.unitPrice < 0
-    );
-
-    if (invalidItem) {
-      alert(
-        "Please complete all item details."
-      );
-      return;
-    }
-
-    if (
-      paymentStatus ===
-        "Partially Paid" &&
-      (!amountPaid ||
-        Number(amountPaid) < 0 ||
-        Number(amountPaid) > grandTotal)
-    ) {
-      alert(
-        "Please enter a valid amount paid."
-      );
+      alert("Please select invoice date.");
       return;
     }
 
@@ -175,145 +109,101 @@ export default function InvoicePage() {
     }, 100);
   };
 
-  /* =========================
-     EDIT INVOICE
-  ========================= */
-
-  const editInvoice = () => {
-    setGenerated(false);
-
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }, 100);
-  };
-
-  /* =========================
-     SAVE AS PNG
-  ========================= */
-
   const saveAsImage = async () => {
-    const invoice =
-      document.getElementById(
-        "invoice-preview"
-      );
-
-    if (!invoice) {
-      alert("Invoice could not be found.");
-      return;
-    }
+    if (!invoiceRef.current) return;
 
     try {
-      const dataUrl = await toPng(invoice, {
+      const dataUrl = await toPng(invoiceRef.current, {
         quality: 1,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
-        cacheBust: true,
       });
 
-      const link =
-        document.createElement("a");
+      const link = document.createElement("a");
 
-      link.download = `Invoice-${
-        invoiceNumber || "BizzBill"
-      }.png`;
+      link.download = `Invoice-${invoiceNumber || "invoice"}.png`;
 
       link.href = dataUrl;
 
       link.click();
     } catch (error) {
       console.error(error);
-
-      alert(
-        "Unable to save the invoice as an image. Please try again."
-      );
+      alert("Unable to save the invoice as an image. Please try again.");
     }
   };
 
-  /* =========================
-     PRINT
-  ========================= */
-
-  const printInvoice = () => {
-    window.print();
-  };
-
-  /* =====================================================
-     GENERATED INVOICE
-  ===================================================== */
-
   if (generated) {
     return (
-      <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6">
+      <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
 
-        {/* TOP NAVIGATION */}
+        {/* TOP BUTTONS */}
 
-        <div className="mx-auto mb-6 flex max-w-5xl items-center justify-between">
+        <div className="mx-auto mb-5 flex max-w-5xl flex-wrap items-center justify-between gap-3">
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
           >
             ← Home
           </Link>
 
-          <div className="text-xl font-bold text-gray-900">
-            Bizz
-            <span className="text-blue-600">
-              Bill
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setGenerated(false)}
+            className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+          >
+            Edit Invoice
+          </button>
 
         </div>
 
-        {/* =========================
-            INVOICE PREVIEW
-        ========================= */}
+        {/* INVOICE */}
 
         <div
-          id="invoice-preview"
-          data-print-invoice
-          className="mx-auto max-w-5xl rounded-2xl bg-white p-6 shadow-lg sm:p-10"
+          ref={invoiceRef}
+          className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-white shadow-lg"
         >
 
           {/* HEADER */}
 
-          <div className="flex flex-col justify-between gap-6 border-b pb-8 sm:flex-row">
+          <div className="border-b border-gray-200 px-6 py-7 sm:px-10">
 
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Bizz
-                <span className="text-blue-600">
-                  Bill
-                </span>
-              </h1>
+            <div className="flex flex-col justify-between gap-6 sm:flex-row">
 
-              <p className="mt-1 text-sm text-gray-500">
-                Professional Invoice
-              </p>
-            </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Bizz
+                  <span className="text-blue-600">
+                    Bill
+                  </span>
+                </h1>
 
-            <div className="text-left sm:text-right">
+                <p className="mt-1 text-sm font-medium text-gray-600">
+                  Professional Invoice
+                </p>
+              </div>
 
-              <h2 className="text-3xl font-bold text-gray-900">
-                INVOICE
-              </h2>
+              <div className="sm:text-right">
 
-              <p className="mt-2 text-sm text-gray-600">
-                Invoice No:{" "}
-                <span className="font-semibold text-gray-900">
-                  {invoiceNumber}
-                </span>
-              </p>
+                <h2 className="text-3xl font-bold text-gray-900">
+                  INVOICE
+                </h2>
 
-              <p className="mt-1 text-sm text-gray-600">
-                Date:{" "}
-                <span className="font-semibold text-gray-900">
-                  {invoiceDate}
-                </span>
-              </p>
+                <p className="mt-2 text-sm text-gray-600">
+                  Invoice No:{" "}
+                  <span className="font-semibold text-gray-900">
+                    {invoiceNumber}
+                  </span>
+                </p>
+
+                <p className="mt-1 text-sm text-gray-600">
+                  Date:{" "}
+                  <span className="font-semibold text-gray-900">
+                    {invoiceDate}
+                  </span>
+                </p>
+
+              </div>
 
             </div>
 
@@ -321,25 +211,25 @@ export default function InvoicePage() {
 
           {/* CUSTOMER */}
 
-          <div className="flex flex-col justify-between gap-6 border-b py-8 sm:flex-row">
+          <div className="grid gap-6 border-b border-gray-200 px-6 py-7 sm:grid-cols-2 sm:px-10">
 
             <div>
-
               <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
                 Bill To
               </p>
 
-              <h3 className="mt-2 text-xl font-bold text-gray-900">
+              <p className="mt-2 text-lg font-bold text-gray-900">
                 {customerName}
-              </h3>
-
-              <p className="mt-1 text-sm text-gray-600">
-                {customerPhone}
               </p>
 
+              {customerPhone && (
+                <p className="mt-1 text-sm text-gray-700">
+                  {customerPhone}
+                </p>
+              )}
             </div>
 
-            <div className="text-left sm:text-right">
+            <div className="sm:text-right">
 
               <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
                 Payment Status
@@ -349,9 +239,8 @@ export default function InvoicePage() {
                 className={`mt-2 text-lg font-bold ${
                   paymentStatus === "Paid"
                     ? "text-green-600"
-                    : paymentStatus ===
-                      "Partially Paid"
-                    ? "text-orange-500"
+                    : paymentStatus === "Partially Paid"
+                    ? "text-orange-600"
                     : "text-red-600"
                 }`}
               >
@@ -364,27 +253,27 @@ export default function InvoicePage() {
 
           {/* ITEMS */}
 
-          <div className="overflow-x-auto py-8">
+          <div className="overflow-x-auto px-6 py-7 sm:px-10">
 
-            <table className="w-full min-w-[650px]">
+            <table className="w-full min-w-[600px] text-sm">
 
               <thead>
 
-                <tr className="border-b text-left text-sm font-bold text-gray-500">
+                <tr className="border-b border-gray-300 text-left">
 
-                  <th className="pb-4">
+                  <th className="pb-4 font-bold text-gray-700">
                     Item
                   </th>
 
-                  <th className="pb-4 text-center">
+                  <th className="pb-4 text-center font-bold text-gray-700">
                     Qty
                   </th>
 
-                  <th className="pb-4 text-right">
+                  <th className="pb-4 text-right font-bold text-gray-700">
                     Unit Price
                   </th>
 
-                  <th className="pb-4 text-right">
+                  <th className="pb-4 text-right font-bold text-gray-700">
                     Amount
                   </th>
 
@@ -394,33 +283,31 @@ export default function InvoicePage() {
 
               <tbody>
 
-                {items.map((item) => (
+                {items.map((item, index) => (
 
                   <tr
-                    key={item.id}
-                    className="border-b"
+                    key={index}
+                    className="border-b border-gray-100"
                   >
 
-                    <td className="py-5 text-sm font-medium text-gray-900">
-                      {item.name}
+                    <td className="py-4 font-medium text-gray-900">
+                      {item.name || "Item / Service"}
                     </td>
 
-                    <td className="py-5 text-center text-sm text-gray-700">
+                    <td className="py-4 text-center text-gray-900">
                       {item.quantity}
                     </td>
 
-                    <td className="py-5 text-right text-sm text-gray-700">
+                    <td className="py-4 text-right text-gray-900">
                       ₦
-                      {item.unitPrice.toLocaleString(
+                      {Number(item.unitPrice).toLocaleString(
                         "en-NG"
                       )}
                     </td>
 
-                    <td className="py-5 text-right text-sm font-semibold text-gray-900">
+                    <td className="py-4 text-right font-bold text-gray-900">
                       ₦
-                      {getItemTotal(
-                        item
-                      ).toLocaleString(
+                      {itemTotal(item).toLocaleString(
                         "en-NG"
                       )}
                     </td>
@@ -437,70 +324,42 @@ export default function InvoicePage() {
 
           {/* TOTALS */}
 
-          <div className="ml-auto max-w-md space-y-4">
+          <div className="border-t border-gray-200 px-6 py-7 sm:px-10">
 
-            <div className="flex justify-between border-b pb-3 text-sm">
+            <div className="ml-auto w-full max-w-md space-y-4">
 
-              <span className="text-gray-600">
-                Subtotal
-              </span>
+              <div className="flex justify-between text-gray-700">
+                <span>Grand Total</span>
 
-              <span className="font-semibold text-gray-900">
-                ₦
-                {subtotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
+                <span className="font-bold text-gray-900">
+                  ₦
+                  {grandTotal.toLocaleString("en-NG")}
+                </span>
+              </div>
 
-            </div>
+              {paymentStatus === "Partially Paid" && (
+                <>
+                  <div className="flex justify-between text-gray-700">
+                    <span>Amount Paid</span>
 
-            {paymentStatus ===
-              "Partially Paid" && (
-              <>
-                <div className="flex justify-between border-b pb-3 text-sm">
+                    <span className="font-bold text-gray-900">
+                      ₦
+                      {amountPaid.toLocaleString("en-NG")}
+                    </span>
+                  </div>
 
-                  <span className="text-gray-600">
-                    Amount Paid
-                  </span>
+                  <div className="flex justify-between border-t border-gray-200 pt-4">
+                    <span className="font-bold text-gray-700">
+                      Balance Due
+                    </span>
 
-                  <span className="font-semibold text-gray-900">
-                    ₦
-                    {paidAmount.toLocaleString(
-                      "en-NG"
-                    )}
-                  </span>
-
-                </div>
-
-                <div className="flex justify-between border-b pb-3 text-sm">
-
-                  <span className="font-semibold text-gray-700">
-                    Balance Due
-                  </span>
-
-                  <span className="font-bold text-red-600">
-                    ₦
-                    {balanceDue.toLocaleString(
-                      "en-NG"
-                    )}
-                  </span>
-
-                </div>
-              </>
-            )}
-
-            <div className="flex justify-between pt-2">
-
-              <span className="text-xl font-bold text-gray-900">
-                Grand Total
-              </span>
-
-              <span className="text-xl font-bold text-blue-600">
-                ₦
-                {grandTotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
+                    <span className="font-bold text-red-600">
+                      ₦
+                      {balanceDue.toLocaleString("en-NG")}
+                    </span>
+                  </div>
+                </>
+              )}
 
             </div>
 
@@ -508,13 +367,13 @@ export default function InvoicePage() {
 
           {/* FOOTER */}
 
-          <div className="mt-12 border-t pt-8 text-center">
+          <div className="border-t border-gray-200 px-6 py-6 text-center sm:px-10">
 
-            <p className="font-semibold text-gray-900">
-              Thank you for your patronage.
+            <p className="font-semibold text-gray-800">
+              Thank you for your business.
             </p>
 
-            <p className="mt-1 text-sm text-gray-800">
+            <p className="mt-1 text-xs text-gray-500">
               Generated with BizzBill
             </p>
 
@@ -522,145 +381,66 @@ export default function InvoicePage() {
 
         </div>
 
-        {/* =========================
-            ACTION BUTTONS
-        ========================= */}
+        {/* ACTIONS */}
 
-        <div className="mx-auto mt-6 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-3">
-
-          {/* SAVE PNG */}
+        <div className="mx-auto mt-5 grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2">
 
           <button
             type="button"
             onClick={saveAsImage}
-            className="rounded-xl bg-blue-600 px-6 py-4 font-bold text-white transition hover:bg-blue-700"
+            className="rounded-xl bg-blue-600 px-5 py-4 font-bold text-white hover:bg-blue-700"
           >
-            🖼️ Save Invoice as PNG
+            🖼 Save Invoice as PNG
           </button>
-
-          {/* PRINT */}
 
           <button
             type="button"
-            onClick={printInvoice}
-            className="rounded-xl bg-gray-900 px-6 py-4 font-bold text-white transition hover:bg-gray-800"
+            onClick={() => window.print()}
+            className="rounded-xl bg-gray-800 px-5 py-4 font-bold text-white hover:bg-gray-900"
           >
-            🖨️ Print Invoice
-          </button>
-
-          {/* EDIT */}
-
-          <button
-            type="button"
-            onClick={editInvoice}
-            className="rounded-xl border border-gray-300 bg-white px-6 py-4 font-bold text-gray-900 transition hover:bg-gray-50"
-          >
-            ← Edit Invoice
+            🖨 Print Invoice
           </button>
 
         </div>
-
-        {/* PRINT STYLE */}
-
-        <style jsx global>{`
-          @media print {
-            body {
-              background: white !important;
-            }
-
-            body * {
-              visibility: hidden;
-            }
-
-            #invoice-preview,
-            #invoice-preview * {
-              visibility: visible;
-            }
-
-            #invoice-preview {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              max-width: none;
-              margin: 0;
-              box-shadow: none;
-              border-radius: 0;
-            }
-          }
-        `}</style>
 
       </main>
     );
   }
 
-  /* =====================================================
-     INVOICE FORM
-  ===================================================== */
-
   return (
-    <main className="min-h-screen bg-gray-100">
+    <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
 
-      {/* HEADER */}
+      <div className="mx-auto max-w-5xl">
 
-      <header className="border-b bg-white">
+        {/* HEADER */}
 
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-
-          <Link
-            href="/"
-            className="text-2xl font-bold text-gray-900"
-          >
-            Bizz
-            <span className="text-blue-600">
-              Bill
-            </span>
-          </Link>
+        <div className="mb-6 flex items-center justify-between">
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
           >
             ← Home
           </Link>
 
-        </div>
-
-      </header>
-
-      {/* MAIN */}
-
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-
-        <div className="mb-8">
-
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
             Create Invoice
           </h1>
 
-          <p className="mt-2 text-sm text-gray-900">
-            Enter the invoice details below.
-          </p>
-
         </div>
 
-        <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
+        {/* FORM */}
 
-          {/* =========================
-              INVOICE DETAILS
-          ========================= */}
+        <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
 
-          <h2 className="mb-5 text-xl font-bold text-gray-900">
+          <h2 className="mb-6 text-2xl font-bold text-gray-900">
             Invoice Details
           </h2>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-            {/* CUSTOMER NAME */}
+          <div className="grid gap-5 sm:grid-cols-2">
 
             <div>
-
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
+              <label className="mb-2 block text-sm font-bold text-gray-800">
                 Customer name
               </label>
 
@@ -668,21 +448,15 @@ export default function InvoicePage() {
                 type="text"
                 value={customerName}
                 onChange={(e) =>
-                  setCustomerName(
-                    e.target.value
-                  )
+                  setCustomerName(e.target.value)
                 }
                 placeholder="Customer name"
-                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
-            {/* CUSTOMER PHONE */}
-
             <div>
-
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
+              <label className="mb-2 block text-sm font-bold text-gray-800">
                 Customer phone
               </label>
 
@@ -690,21 +464,15 @@ export default function InvoicePage() {
                 type="tel"
                 value={customerPhone}
                 onChange={(e) =>
-                  setCustomerPhone(
-                    e.target.value
-                  )
+                  setCustomerPhone(e.target.value)
                 }
                 placeholder="Customer phone"
-                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
-            {/* INVOICE NUMBER */}
-
             <div>
-
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
+              <label className="mb-2 block text-sm font-bold text-gray-800">
                 Invoice number
               </label>
 
@@ -712,21 +480,15 @@ export default function InvoicePage() {
                 type="text"
                 value={invoiceNumber}
                 onChange={(e) =>
-                  setInvoiceNumber(
-                    e.target.value
-                  )
+                  setInvoiceNumber(e.target.value)
                 }
                 placeholder="Invoice number"
-                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
-            {/* INVOICE DATE */}
-
             <div>
-
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
+              <label className="mb-2 block text-sm font-bold text-gray-800">
                 Invoice date
               </label>
 
@@ -734,33 +496,28 @@ export default function InvoicePage() {
                 type="date"
                 value={invoiceDate}
                 onChange={(e) =>
-                  setInvoiceDate(
-                    e.target.value
-                  )
+                  setInvoiceDate(e.target.value)
                 }
-                className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
           </div>
 
-          {/* =========================
-              ITEMS
-          ========================= */}
+          {/* ITEMS */}
 
-          <div className="mt-10">
+          <div className="mt-8">
 
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between gap-3">
 
-              <h2 className="text-xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-gray-900">
                 Items
               </h2>
 
               <button
                 type="button"
                 onClick={addItem}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"
               >
                 + Add Item
               </button>
@@ -769,20 +526,17 @@ export default function InvoicePage() {
 
             <div className="space-y-4">
 
-              {items.map((item) => (
+              {items.map((item, index) => (
 
                 <div
-                  key={item.id}
-                  className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                  key={index}
+                  className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
                 >
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+                  <div className="grid gap-4 sm:grid-cols-3">
 
-                    {/* ITEM */}
-
-                    <div className="md:col-span-4">
-
-                      <label className="mb-2 block text-xs font-semibold text-gray-900">
+                    <div>
+                      <label className="mb-2 block text-sm font-bold text-gray-700">
                         Item
                       </label>
 
@@ -791,22 +545,18 @@ export default function InvoicePage() {
                         value={item.name}
                         onChange={(e) =>
                           updateItem(
-                            item.id,
+                            index,
                             "name",
                             e.target.value
                           )
                         }
                         placeholder="Item / Service"
-                        className="w-full rounded-lg border border-gray-800 bg-white px-3 py-3 outline-none focus:border-blue-500"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none"
                       />
-
                     </div>
 
-                    {/* QUANTITY */}
-
-                    <div className="md:col-span-2">
-
-                      <label className="mb-2 block text-xs font-semibold text-gray-900">
+                    <div>
+                      <label className="mb-2 block text-sm font-bold text-gray-700">
                         Quantity
                       </label>
 
@@ -816,94 +566,56 @@ export default function InvoicePage() {
                         value={item.quantity}
                         onChange={(e) =>
                           updateItem(
-                            item.id,
+                            index,
                             "quantity",
-                            Math.max(
-                              1,
-                              Number(
-                                e.target.value
-                              )
-                            )
+                            Number(e.target.value)
                           )
                         }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 outline-none focus:border-blue-500"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-medium text-gray-900 focus:border-blue-600 focus:outline-none"
                       />
-
                     </div>
 
-                    {/* UNIT PRICE */}
-
-                    <div className="md:col-span-2">
-
-                      <label className="mb-2 block text-xs font-semibold text-gray-900">
+                    <div>
+                      <label className="mb-2 block text-sm font-bold text-gray-700">
                         Unit price
                       </label>
 
                       <input
                         type="number"
                         min="0"
-                        value={
-                          item.unitPrice === 0
-                            ? ""
-                            : item.unitPrice
-                        }
+                        value={item.unitPrice || ""}
                         onChange={(e) =>
                           updateItem(
-                            item.id,
+                            index,
                             "unitPrice",
-                            Math.max(
-                              0,
-                              Number(
-                                e.target.value
-                              )
-                            )
+                            Number(e.target.value)
                           )
                         }
                         placeholder="₦0"
-                        className="w-full rounded-lg border border-gray-800 bg-white px-3 py-3 outline-none focus:border-blue-500"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none"
                       />
-
                     </div>
 
-                    {/* ITEM TOTAL */}
+                  </div>
 
-                    <div className="md:col-span-3">
+                  <div className="mt-4 flex items-center justify-between">
 
-                      <label className="mb-2 block text-xs font-semibold text-gray-900">
-                        Item total
-                      </label>
+                    <p className="font-bold text-gray-800">
+                      Item total: ₦
+                      {itemTotal(item).toLocaleString(
+                        "en-NG"
+                      )}
+                    </p>
 
-                      <div className="flex h-[48px] items-center rounded-lg border border-gray-800 bg-gray-100 px-3 font-bold text-gray-900">
-                        ₦
-                        {getItemTotal(
-                          item
-                        ).toLocaleString(
-                          "en-NG"
-                        )}
-                      </div>
-
-                    </div>
-
-                    {/* REMOVE */}
-
-                    <div className="flex items-end md:col-span-1">
-
+                    {items.length > 1 && (
                       <button
                         type="button"
-                        onClick={() =>
-                          removeItem(
-                            item.id
-                          )
-                        }
-                        disabled={
-                          items.length === 1
-                        }
-                        className="h-[48px] w-full rounded-lg border border-red-800 px-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        onClick={() => removeItem(index)}
+                        className="font-bold text-red-600 hover:text-red-700"
                       >
                         Remove
                       </button>
-
-                    </div>
+                    )}
 
                   </div>
 
@@ -915,163 +627,113 @@ export default function InvoicePage() {
 
           </div>
 
-          {/* =========================
-              TOTALS
-          ========================= */}
+          {/* TOTAL */}
 
-          <div className="mt-8 ml-auto max-w-md rounded-xl bg-gray-50 p-5">
+          <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
-            <div className="flex justify-between text-lg font-bold">
+            <div className="flex justify-between">
 
-              <span>
-                Subtotal
-              </span>
-
-              <span>
-                ₦
-                {subtotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-
-            </div>
-
-            <div className="mt-4 flex justify-between border-t pt-4 text-xl font-bold">
-
-              <span>
+              <span className="font-bold text-gray-800">
                 Grand Total
               </span>
 
-              <span className="text-blue-600">
+              <span className="text-xl font-bold text-gray-900">
                 ₦
-                {grandTotal.toLocaleString(
-                  "en-NG"
-                )}
+                {grandTotal.toLocaleString("en-NG")}
               </span>
 
             </div>
 
           </div>
 
-          {/* =========================
-              PAYMENT
-          ========================= */}
+          {/* PAYMENT */}
 
-          <div className="mt-10">
+          <div className="mt-8">
 
-            <h2 className="mb-5 text-xl font-bold text-gray-900">
-              Payment
-            </h2>
+            <label className="mb-2 block text-sm font-bold text-gray-800">
+              Payment status
+            </label>
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <select
+              value={paymentStatus}
+              onChange={(e) =>
+                setPaymentStatus(
+                  e.target.value as
+                    | "Unpaid"
+                    | "Paid"
+                    | "Partially Paid"
+                )
+              }
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="Unpaid">
+                Unpaid
+              </option>
 
-              {/* PAYMENT STATUS */}
+              <option value="Paid">
+                Paid
+              </option>
 
-              <div>
+              <option value="Partially Paid">
+                Partially Paid
+              </option>
+            </select>
 
-                <label className="mb-2 block text-sm font-semibold text-gray-900">
-                  Payment status
-                </label>
+          </div>
 
-                <select
-                  value={paymentStatus}
-                  onChange={(e) =>
-                    setPaymentStatus(
-                      e.target
-                        .value as PaymentStatus
+          {paymentStatus === "Partially Paid" && (
+
+            <div className="mt-5">
+
+              <label className="mb-2 block text-sm font-bold text-gray-800">
+                Amount paid
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                max={grandTotal}
+                value={amountPaid || ""}
+                onChange={(e) =>
+                  setAmountPaid(
+                    Math.min(
+                      Number(e.target.value),
+                      grandTotal
                     )
-                  }
-                  className="w-full rounded-xl border border-gray-800 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                >
+                  )
+                }
+                placeholder="₦0"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-900 placeholder:text-gray-500 focus:border-blue-600 focus:outline-none"
+              />
 
-                  <option value="Unpaid">
-                    Unpaid
-                  </option>
+              <div className="mt-4 flex justify-between rounded-xl bg-red-50 p-4">
 
-                  <option value="Partially Paid">
-                    Partially Paid
-                  </option>
+                <span className="font-bold text-gray-700">
+                  Balance Due
+                </span>
 
-                  <option value="Paid">
-                    Paid
-                  </option>
-
-                </select>
+                <span className="font-bold text-red-600">
+                  ₦
+                  {balanceDue.toLocaleString("en-NG")}
+                </span>
 
               </div>
-
-              {/* AMOUNT PAID */}
-
-              {paymentStatus ===
-                "Partially Paid" && (
-                <div>
-
-                  <label className="mb-2 block text-sm font-semibold text-gray-900">
-                    Amount paid
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    max={grandTotal}
-                    value={amountPaid}
-                    onChange={(e) =>
-                      setAmountPaid(
-                        e.target.value
-                      )
-                    }
-                    placeholder="Amount paid"
-                    className="w-full rounded-xl border border-gray-800 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-
-                </div>
-              )}
 
             </div>
 
-            {/* BALANCE DUE */}
+          )}
 
-            {paymentStatus ===
-              "Partially Paid" && (
-              <div className="mt-5 rounded-xl border border-orange-500 bg-orange-50 p-5">
+          {/* GENERATE */}
 
-                <div className="flex justify-between">
+          <button
+            type="button"
+            onClick={generateInvoice}
+            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-bold text-white shadow-sm hover:bg-blue-700"
+          >
+            Generate Invoice
+          </button>
 
-                  <span className="font-semibold text-gray-900">
-                    Balance Due
-                  </span>
-
-                  <span className="font-bold text-red-600">
-                    ₦
-                    {balanceDue.toLocaleString(
-                      "en-NG"
-                    )}
-                  </span>
-
-                </div>
-
-              </div>
-            )}
-
-          </div>
-
-          {/* =========================
-              GENERATE BUTTON
-          ========================= */}
-
-          <div className="mt-10">
-
-            <button
-              type="button"
-              onClick={generateInvoice}
-              className="w-full rounded-xl bg-blue-600 px-6 py-4 text-lg font-bold text-white shadow-sm transition hover:bg-blue-700"
-            >
-              Generate Invoice
-            </button>
-
-          </div>
-
-        </section>
+        </div>
 
       </div>
 
