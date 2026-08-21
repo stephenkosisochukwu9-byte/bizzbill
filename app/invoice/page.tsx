@@ -30,7 +30,7 @@ export default function InvoicePage() {
   const [items, setItems] = useState<Item[]>([
     {
       name: "",
-      quantity: 1,
+      quantity: 0,
       unitPrice: 0,
     },
   ]);
@@ -61,7 +61,7 @@ export default function InvoicePage() {
       ...current,
       {
         name: "",
-        quantity: 1,
+        quantity: 0,
         unitPrice: 0,
       },
     ]);
