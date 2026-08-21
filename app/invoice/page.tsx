@@ -8,7 +8,7 @@ type PaymentStatus = "Unpaid" | "Paid" | "Partially Paid";
 
 type Item = {
   name: string;
-  quantity: number;
+  quantity: number | "";
   unitPrice: number;
 };
 
@@ -30,7 +30,7 @@ export default function InvoicePage() {
   const [items, setItems] = useState<Item[]>([
     {
       name: "",
-      quantity: 0,
+      quantity: "",
       unitPrice: 0,
     },
   ]);
@@ -61,7 +61,7 @@ export default function InvoicePage() {
       ...current,
       {
         name: "",
-        quantity: 0,
+        quantity: "",
         unitPrice: 0,
       },
     ]);
@@ -625,21 +625,23 @@ export default function InvoicePage() {
                       </label>
 
                       <input
-                        type="number"
-                        min="1"
-                        value={item.quantity || ""}
-                        onChange={(e) =>
-                          updateItem(
-                            index,
-                            "quantity",
-                            Math.max(
-                              Number(e.target.value),
-                              1
-                            )
-                          )
-                        }
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 focus:border-blue-600 focus:outline-none"
-                      />
+  type="number"
+  min="1"
+  value={item.quantity}
+  onChange={(e) => {
+    const value = e.target.value;
+
+    updateItem(
+      index,
+      "quantity",
+      value === "" ? "" : Number(value)
+    );
+  }}
+  placeholder="Quantity"
+  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
+/>
+
+
                     </div>
 
                     {/* UNIT PRICE */}
