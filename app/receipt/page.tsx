@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 type Item = {
   name: string;
@@ -16,13 +17,30 @@ type PaymentMethod =
   | "Card"
   | "Other";
 
+type BusinessProfile = {
+  business_name: string | null;
+  address: string | null;
+};
+
 export default function ReceiptPage() {
+  const supabase = createClient();
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const [generated, setGenerated] = useState(false);
 
-  const [businessName, setBusinessName] =
-    useState("BizzBill");
+  /* =========================
+     BUSINESS PROFILE
+  ========================= */
+
+  const [businessProfile, setBusinessProfile] =
+    useState<BusinessProfile | null>(null);
+
+  const [profileLoading, setProfileLoading] =
+    useState(true);
+
+  /* =========================
+     RECEIPT DETAILS
+  ========================= */
 
   const [customerName, setCustomerName] =
     useState("");
@@ -48,6 +66,80 @@ export default function ReceiptPage() {
   ]);
 
   /* =========================
+     GET BUSINESS PROFILE
+  ========================= */
+
+  useEffect(() => {
+    const getBusinessProfile = async () => {
+      try {
+        setProfileLoading(true);
+
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.error(
+            "User fetch error:",
+            userError
+          );
+          return;
+        }
+
+        if (!user) {
+          console.error(
+            "No logged-in user found."
+          );
+          return;
+        }
+
+        /*
+          We do not use .single() because your
+          database currently has more than one
+          business profile for this user.
+
+          We use the newest profile instead.
+        */
+
+        const { data, error } = await supabase
+          .from("business_profiles")
+          .select("business_name, address")
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1);
+
+        if (error) {
+          console.error(
+            "Business profile fetch error:",
+            error
+          );
+          return;
+        }
+
+        if (data && data.length > 0) {
+          setBusinessProfile(data[0]);
+        } else {
+          console.log(
+            "No business profile found."
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Profile fetch error:",
+          error
+        );
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    getBusinessProfile();
+  }, [supabase]);
+
+  /* =========================
      ITEM TOTAL
   ========================= */
 
@@ -63,7 +155,8 @@ export default function ReceiptPage() {
   ========================= */
 
   const grandTotal = items.reduce(
-    (total, item) => total + itemTotal(item),
+    (total, item) =>
+      total + itemTotal(item),
     0
   );
 
@@ -131,8 +224,10 @@ export default function ReceiptPage() {
   ========================= */
 
   const generateReceipt = () => {
-    if (!businessName.trim()) {
-      alert("Please enter business name.");
+    if (!businessProfile?.business_name?.trim()) {
+      alert(
+        "Please complete your business profile first."
+      );
       return;
     }
 
@@ -151,8 +246,14 @@ export default function ReceiptPage() {
       return;
     }
 
-    if (items.some((item) => !item.name.trim())) {
-      alert("Please enter a name for every item.");
+    if (
+      items.some(
+        (item) => !item.name.trim()
+      )
+    ) {
+      alert(
+        "Please enter a name for every item."
+      );
       return;
     }
 
@@ -163,7 +264,9 @@ export default function ReceiptPage() {
           Number(item.quantity) <= 0
       )
     ) {
-      alert("Please enter a valid quantity for every item.");
+      alert(
+        "Please enter a valid quantity for every item."
+      );
       return;
     }
 
@@ -182,58 +285,64 @@ export default function ReceiptPage() {
   ========================= */
 
   const saveAsImage = async () => {
-  if (!receiptRef.current) return;
+    if (!receiptRef.current) return;
 
-  const element = receiptRef.current;
+    const element = receiptRef.current;
 
-  // Remember the original responsive styles
-  const originalWidth = element.style.width;
-  const originalMaxWidth = element.style.maxWidth;
-  const originalMinWidth = element.style.minWidth;
+    const originalWidth =
+      element.style.width;
 
-  try {
-    /*
-      Force a consistent width only while creating the PNG.
-      This makes portrait and landscape exports identical.
-    */
-    element.style.width = "720px";
-    element.style.maxWidth = "720px";
-    element.style.minWidth = "720px";
+    const originalMaxWidth =
+      element.style.maxWidth;
 
-    // Allow the browser to recalculate the layout
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const originalMinWidth =
+      element.style.minWidth;
 
-    const dataUrl = await toPng(element, {
-      width: 720,
-      height: element.scrollHeight,
-      pixelRatio: 2,
-      quality: 1,
-      backgroundColor: "#ffffff",
-      cacheBust: true,
-    });
+    try {
+      element.style.width = "720px";
+      element.style.maxWidth = "720px";
+      element.style.minWidth = "720px";
 
-    const link = document.createElement("a");
+      await new Promise((resolve) =>
+        setTimeout(resolve, 100)
+      );
 
-    link.download = `Receipt-${receiptNumber || "receipt"}.png`;
+      const dataUrl = await toPng(element, {
+        width: 720,
+        height: element.scrollHeight,
+        pixelRatio: 2,
+        quality: 1,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
 
-    link.href = dataUrl;
+      const link =
+        document.createElement("a");
 
-    link.click();
-  } catch (error) {
-    console.error(error);
+      link.download = `Receipt-${
+        receiptNumber || "receipt"
+      }.png`;
 
-    alert(
-      "Unable to save the receipt as an image. Please try again."
-    );
-  } finally {
-    // Restore the normal responsive mobile layout
-    element.style.width = originalWidth;
-    element.style.maxWidth = originalMaxWidth;
-    element.style.minWidth = originalMinWidth;
-  }
-};
+      link.href = dataUrl;
 
+      link.click();
+    } catch (error) {
+      console.error(error);
 
+      alert(
+        "Unable to save the receipt as an image. Please try again."
+      );
+    } finally {
+      element.style.width =
+        originalWidth;
+
+      element.style.maxWidth =
+        originalMaxWidth;
+
+      element.style.minWidth =
+        originalMinWidth;
+    }
+  };
 
   /* ==================================================
      GENERATED RECEIPT
@@ -271,9 +380,7 @@ export default function ReceiptPage() {
 
         <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-10">
 
-          {/* =========================
-              TOP BUTTONS
-          ========================= */}
+          {/* TOP BUTTONS */}
 
           <div className="no-print mx-auto mb-5 flex w-full max-w-4xl items-center justify-between gap-3">
 
@@ -296,16 +403,13 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              RECEIPT
-          ========================= */}
+          {/* RECEIPT */}
 
-         <div
-  ref={receiptRef}
-  className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
->
-
-
+          <div
+            ref={receiptRef}
+            data-print-receipt
+            className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
+          >
 
             {/* =========================
                 RECEIPT HEADER
@@ -317,13 +421,20 @@ export default function ReceiptPage() {
 
                 {/* BUSINESS */}
 
-                <div>
+                <div className="min-w-0">
 
                   <h1 className="break-words text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
-                    {businessName}
+                    {businessProfile?.business_name ||
+                      "BizzBill"}
                   </h1>
 
-                  <p className="mt-1 text-sm font-semibold text-gray-700 sm:text-base">
+                  {businessProfile?.address && (
+                    <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-700 sm:text-base">
+                      {businessProfile.address}
+                    </p>
+                  )}
+
+                  <p className="mt-2 text-sm font-semibold text-gray-700 sm:text-base">
                     Payment Receipt
                   </p>
 
@@ -435,6 +546,7 @@ export default function ReceiptPage() {
 
                     {items.map(
                       (item, index) => (
+
                         <tr
                           key={index}
                           className="border-b border-gray-100"
@@ -467,6 +579,7 @@ export default function ReceiptPage() {
                           </td>
 
                         </tr>
+
                       )
                     )}
 
@@ -559,9 +672,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              ACTION BUTTONS
-          ========================= */}
+          {/* ACTION BUTTONS */}
 
           <div className="no-print mx-auto mt-5 grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2">
 
@@ -599,9 +710,7 @@ export default function ReceiptPage() {
 
       <div className="mx-auto w-full max-w-5xl">
 
-        {/* =========================
-            HEADER
-        ========================= */}
+        {/* HEADER */}
 
         <div className="mb-6 flex items-center justify-between gap-3">
 
@@ -618,43 +727,70 @@ export default function ReceiptPage() {
 
         </div>
 
-        {/* =========================
-            FORM
-        ========================= */}
+        {/* FORM */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
+
+          {/* BUSINESS PROFILE PREVIEW */}
+
+          <div className="mb-7 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+
+            <p className="text-xs font-extrabold uppercase tracking-wide text-blue-700">
+              Receipt From
+            </p>
+
+            {profileLoading ? (
+
+              <p className="mt-2 text-sm font-semibold text-gray-600">
+                Loading business information...
+              </p>
+
+            ) : businessProfile ? (
+
+              <div className="mt-2">
+
+                <p className="text-xl font-extrabold text-gray-950">
+                  {businessProfile.business_name ||
+                    "Business name not set"}
+                </p>
+
+                {businessProfile.address && (
+                  <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-700">
+                    {businessProfile.address}
+                  </p>
+                )}
+
+                <p className="mt-3 text-xs font-semibold text-blue-700">
+                  This information will automatically appear on your receipt.
+                </p>
+
+              </div>
+
+            ) : (
+
+              <div className="mt-2">
+
+                <p className="text-sm font-bold text-red-600">
+                  No business profile found.
+                </p>
+
+                <p className="mt-1 text-sm font-medium text-gray-600">
+                  Please complete your business profile before creating receipts.
+                </p>
+
+              </div>
+
+            )}
+
+          </div>
 
           <h2 className="mb-6 text-2xl font-extrabold text-gray-950">
             Receipt Details
           </h2>
 
-          {/* =========================
-              BASIC DETAILS
-          ========================= */}
+          {/* BASIC DETAILS */}
 
           <div className="grid gap-5 sm:grid-cols-2">
-
-            {/* BUSINESS NAME */}
-
-            <div>
-
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
-                Business name
-              </label>
-
-              <input
-                type="text"
-                value={businessName}
-                onChange={(e) =>
-                  setBusinessName(
-                    e.target.value
-                  )
-                }
-                placeholder="Business name"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
 
             {/* CUSTOMER NAME */}
 
@@ -721,11 +857,48 @@ export default function ReceiptPage() {
 
             </div>
 
+            {/* PAYMENT METHOD */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+                Payment method
+              </label>
+
+              <select
+                value={paymentMethod}
+                onChange={(e) =>
+                  setPaymentMethod(
+                    e.target
+                      .value as PaymentMethod
+                  )
+                }
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              >
+
+                <option value="Cash">
+                  Cash
+                </option>
+
+                <option value="Bank Transfer">
+                  Bank Transfer
+                </option>
+
+                <option value="Card">
+                  Card
+                </option>
+
+                <option value="Other">
+                  Other
+                </option>
+
+              </select>
+
+            </div>
+
           </div>
 
-          {/* =========================
-              ITEMS
-          ========================= */}
+          {/* ITEMS */}
 
           <div className="mt-8">
 
@@ -831,18 +1004,20 @@ export default function ReceiptPage() {
                           value={
                             item.unitPrice || ""
                           }
-                          onChange={(e) =>
+                          onChange={(e) => {
+
+                            const value =
+                              e.target.value;
+
                             updateItem(
                               index,
                               "unitPrice",
-                              e.target.value === ""
+                              value === ""
                                 ? 0
-                                : Number(
-                                    e.target
-                                      .value
-                                  )
-                            )
-                          }
+                                : Number(value)
+                            );
+
+                          }}
                           placeholder="₦0"
                           className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
                         />
@@ -864,8 +1039,7 @@ export default function ReceiptPage() {
                         )}
                       </p>
 
-                      {items.length >
-                        1 && (
+                      {items.length > 1 && (
                         <button
                           type="button"
                           onClick={() =>
@@ -890,9 +1064,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              TOTAL AMOUNT
-          ========================= */}
+          {/* TOTAL AMOUNT */}
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
@@ -913,14 +1085,12 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              PAYMENT INFO
-          ========================= */}
+          {/* PAYMENT INFO */}
 
           <div className="mt-8">
 
             <label className="mb-2 block text-sm font-extrabold text-gray-900">
-              Payment info
+              Payment method
             </label>
 
             <select
@@ -954,9 +1124,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              AMOUNT PAID
-          ========================= */}
+          {/* AMOUNT PAID */}
 
           <div className="mt-5">
 
@@ -998,9 +1166,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              BALANCE DUE
-          ========================= */}
+          {/* BALANCE DUE */}
 
           <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-red-50 p-4">
 
@@ -1017,9 +1183,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* =========================
-              GENERATE
-          ========================= */}
+          {/* GENERATE */}
 
           <button
             type="button"
