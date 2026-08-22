@@ -182,39 +182,58 @@ export default function ReceiptPage() {
   ========================= */
 
   const saveAsImage = async () => {
-    if (!receiptRef.current) {
-      return;
-    }
+  if (!receiptRef.current) return;
 
-    try {
-      const dataUrl = await toPng(
-        receiptRef.current,
-        {
-          quality: 1,
-          pixelRatio: 2,
-          backgroundColor: "#ffffff",
-          cacheBust: true,
-        }
-      );
+  const element = receiptRef.current;
 
-      const link =
-        document.createElement("a");
+  // Remember the original responsive styles
+  const originalWidth = element.style.width;
+  const originalMaxWidth = element.style.maxWidth;
+  const originalMinWidth = element.style.minWidth;
 
-      link.download = `Receipt-${
-        receiptNumber || "receipt"
-      }.png`;
+  try {
+    /*
+      Force a consistent width only while creating the PNG.
+      This makes portrait and landscape exports identical.
+    */
+    element.style.width = "720px";
+    element.style.maxWidth = "720px";
+    element.style.minWidth = "720px";
 
-      link.href = dataUrl;
+    // Allow the browser to recalculate the layout
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-      link.click();
-    } catch (error) {
-      console.error(error);
+    const dataUrl = await toPng(element, {
+      width: 720,
+      height: element.scrollHeight,
+      pixelRatio: 2,
+      quality: 1,
+      backgroundColor: "#ffffff",
+      cacheBust: true,
+    });
 
-      alert(
-        "Unable to save the receipt as an image. Please try again."
-      );
-    }
-  };
+    const link = document.createElement("a");
+
+    link.download = `Receipt-${receiptNumber || "receipt"}.png`;
+
+    link.href = dataUrl;
+
+    link.click();
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      "Unable to save the receipt as an image. Please try again."
+    );
+  } finally {
+    // Restore the normal responsive mobile layout
+    element.style.width = originalWidth;
+    element.style.maxWidth = originalMaxWidth;
+    element.style.minWidth = originalMinWidth;
+  }
+};
+
+
 
   /* ==================================================
      GENERATED RECEIPT
@@ -281,11 +300,12 @@ export default function ReceiptPage() {
               RECEIPT
           ========================= */}
 
-          <div
-            ref={receiptRef}
-            data-print-receipt
-            className="mx-auto box-border w-full max-w-4xl overflow-hidden rounded-2xl bg-white text-gray-950 shadow-lg"
-          >
+         <div
+  ref={receiptRef}
+  className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
+>
+
+
 
             {/* =========================
                 RECEIPT HEADER
