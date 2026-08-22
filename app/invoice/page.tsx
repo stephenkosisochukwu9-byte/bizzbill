@@ -135,14 +135,32 @@ export default function InvoicePage() {
      SAVE AS PNG
   ========================= */
 
- const saveAsImage = async () => {
+const saveAsImage = async () => {
   if (!invoiceRef.current) return;
 
+  const element = invoiceRef.current;
+
+  // Remember the original styles
+  const originalWidth = element.style.width;
+  const originalMaxWidth = element.style.maxWidth;
+  const originalMinWidth = element.style.minWidth;
+
   try {
-    const element = invoiceRef.current;
+    /*
+      IMPORTANT:
+      Force the invoice to a consistent export width.
+      This prevents portrait/landscape screens from
+      producing different PNG layouts.
+    */
+    element.style.width = "720px";
+    element.style.maxWidth = "720px";
+    element.style.minWidth = "720px";
+
+    // Give the browser a moment to recalculate the layout
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const dataUrl = await toPng(element, {
-      width: element.scrollWidth,
+      width: 720,
       height: element.scrollHeight,
       pixelRatio: 2,
       quality: 1,
@@ -163,8 +181,14 @@ export default function InvoicePage() {
     alert(
       "Unable to save the invoice as an image. Please try again."
     );
+  } finally {
+    // Restore the responsive mobile layout
+    element.style.width = originalWidth;
+    element.style.maxWidth = originalMaxWidth;
+    element.style.minWidth = originalMinWidth;
   }
 };
+
 
 
 
@@ -228,12 +252,10 @@ export default function InvoicePage() {
 
           <div
   ref={invoiceRef}
-  style={{
-    width: "720px",
-    maxWidth: "100%",
-  }}
-  className="mx-auto overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
+  className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
 >
+
+
 
 
             {/* HEADER */}
