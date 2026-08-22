@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 type PaymentStatus = "Unpaid" | "Paid" | "Partially Paid";
 
@@ -12,10 +13,29 @@ type Item = {
   unitPrice: number;
 };
 
+type BusinessProfile = {
+  business_name: string | null;
+  address: string | null;
+};
+
 export default function InvoicePage() {
+  const supabase = createClient();
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const [generated, setGenerated] = useState(false);
+
+  /* =========================
+     BUSINESS PROFILE
+  ========================= */
+
+  const [businessProfile, setBusinessProfile] =
+    useState<BusinessProfile | null>(null);
+
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  /* =========================
+     INVOICE DETAILS
+  ========================= */
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -34,6 +54,67 @@ export default function InvoicePage() {
       unitPrice: 0,
     },
   ]);
+
+  /* =========================
+     GET BUSINESS PROFILE
+  ========================= */
+
+  useEffect(() => {
+    const getBusinessProfile = async () => {
+      try {
+        setProfileLoading(true);
+
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.error("User fetch error:", userError);
+          return;
+        }
+
+        if (!user) {
+          console.error("No logged-in user found.");
+          return;
+        }
+
+        /*
+          We intentionally do NOT use .single()
+          because your database currently has
+          more than one profile for this user.
+
+          We take the newest profile instead.
+        */
+
+        const { data, error } = await supabase
+          .from("business_profiles")
+          .select("business_name, address")
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1);
+
+        if (error) {
+          console.error("Business profile fetch error:", error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          setBusinessProfile(data[0]);
+        } else {
+          console.log("No business profile found.");
+        }
+      } catch (error) {
+        console.error("Profile fetch error:", error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    getBusinessProfile();
+  }, [supabase]);
 
   /* =========================
      ITEM FUNCTIONS
@@ -135,62 +216,54 @@ export default function InvoicePage() {
      SAVE AS PNG
   ========================= */
 
-const saveAsImage = async () => {
-  if (!invoiceRef.current) return;
+  const saveAsImage = async () => {
+    if (!invoiceRef.current) return;
 
-  const element = invoiceRef.current;
+    const element = invoiceRef.current;
 
-  // Remember the original styles
-  const originalWidth = element.style.width;
-  const originalMaxWidth = element.style.maxWidth;
-  const originalMinWidth = element.style.minWidth;
+    const originalWidth = element.style.width;
+    const originalMaxWidth = element.style.maxWidth;
+    const originalMinWidth = element.style.minWidth;
 
-  try {
-    /*
-      IMPORTANT:
-      Force the invoice to a consistent export width.
-      This prevents portrait/landscape screens from
-      producing different PNG layouts.
-    */
-    element.style.width = "720px";
-    element.style.maxWidth = "720px";
-    element.style.minWidth = "720px";
+    try {
+      element.style.width = "720px";
+      element.style.maxWidth = "720px";
+      element.style.minWidth = "720px";
 
-    // Give the browser a moment to recalculate the layout
-    await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 100)
+      );
 
-    const dataUrl = await toPng(element, {
-      width: 720,
-      height: element.scrollHeight,
-      pixelRatio: 2,
-      quality: 1,
-      backgroundColor: "#ffffff",
-      cacheBust: true,
-    });
+      const dataUrl = await toPng(element, {
+        width: 720,
+        height: element.scrollHeight,
+        pixelRatio: 2,
+        quality: 1,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
 
-    const link = document.createElement("a");
+      const link = document.createElement("a");
 
-    link.download = `Invoice-${invoiceNumber || "invoice"}.png`;
+      link.download = `Invoice-${
+        invoiceNumber || "invoice"
+      }.png`;
 
-    link.href = dataUrl;
+      link.href = dataUrl;
 
-    link.click();
-  } catch (error) {
-    console.error(error);
+      link.click();
+    } catch (error) {
+      console.error(error);
 
-    alert(
-      "Unable to save the invoice as an image. Please try again."
-    );
-  } finally {
-    // Restore the responsive mobile layout
-    element.style.width = originalWidth;
-    element.style.maxWidth = originalMaxWidth;
-    element.style.minWidth = originalMinWidth;
-  }
-};
-
-
-
+      alert(
+        "Unable to save the invoice as an image. Please try again."
+      );
+    } finally {
+      element.style.width = originalWidth;
+      element.style.maxWidth = originalMaxWidth;
+      element.style.minWidth = originalMinWidth;
+    }
+  };
 
   /* =========================
      GENERATED INVOICE
@@ -227,9 +300,11 @@ const saveAsImage = async () => {
         `}</style>
 
         <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-10">
+
           {/* TOP NAVIGATION */}
 
           <div className="no-print mx-auto mb-5 flex w-full max-w-4xl items-center justify-between gap-3">
+
             <Link
               href="/"
               className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-sm transition hover:bg-gray-50"
@@ -244,6 +319,7 @@ const saveAsImage = async () => {
             >
               Edit Invoice
             </button>
+
           </div>
 
           {/* =========================
@@ -251,40 +327,50 @@ const saveAsImage = async () => {
           ========================= */}
 
           <div
-  ref={invoiceRef}
-  className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
->
+            ref={invoiceRef}
+            data-print-invoice
+            className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
+          >
 
-
-
-
-            {/* HEADER */}
+            {/* =========================
+                HEADER
+            ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
-              <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
-                {/* BRAND */}
 
-                <div>
-                  <h1 className="text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
-                    Bizz
-                    <span className="text-blue-600">
-                      Bill
-                    </span>
+              <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
+
+                {/* BUSINESS INFORMATION */}
+
+                <div className="min-w-0">
+
+                  <h1 className="break-words text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
+                    {businessProfile?.business_name ||
+                      "BizzBill"}
                   </h1>
 
-                  <p className="mt-1 text-sm font-semibold text-gray-700 sm:text-base">
+                  {businessProfile?.address && (
+                    <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-700 sm:text-base">
+                      {businessProfile.address}
+                    </p>
+                  )}
+
+                  <p className="mt-2 text-sm font-semibold text-gray-600 sm:text-base">
                     Professional Invoice
                   </p>
+
                 </div>
 
                 {/* INVOICE DETAILS */}
 
                 <div className="sm:text-right">
+
                   <h2 className="text-3xl font-extrabold text-gray-950 sm:text-4xl">
                     INVOICE
                   </h2>
 
                   <div className="mt-3 space-y-1.5 text-sm text-gray-700 sm:text-base">
+
                     <p>
                       Invoice No:{" "}
                       <span className="font-extrabold text-gray-950">
@@ -298,17 +384,25 @@ const saveAsImage = async () => {
                         {invoiceDate}
                       </span>
                     </p>
+
                   </div>
+
                 </div>
+
               </div>
+
             </div>
 
-            {/* CUSTOMER + PAYMENT STATUS */}
+            {/* =========================
+                CUSTOMER + PAYMENT STATUS
+            ========================= */}
 
             <div className="grid grid-cols-1 gap-7 border-b border-gray-200 px-5 py-7 sm:grid-cols-2 sm:px-10 sm:py-9">
+
               {/* CUSTOMER */}
 
               <div>
+
                 <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
                   Bill To
                 </p>
@@ -322,11 +416,13 @@ const saveAsImage = async () => {
                     {customerPhone}
                   </p>
                 )}
+
               </div>
 
               {/* PAYMENT STATUS */}
 
               <div className="sm:text-right">
+
                 <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
                   Payment Status
                 </p>
@@ -342,7 +438,9 @@ const saveAsImage = async () => {
                 >
                   {paymentStatus}
                 </p>
+
               </div>
+
             </div>
 
             {/* =========================
@@ -350,10 +448,15 @@ const saveAsImage = async () => {
             ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
+
               <div className="w-full overflow-hidden">
+
                 <table className="w-full table-fixed border-collapse">
+
                   <thead>
+
                     <tr className="border-b-2 border-gray-300">
+
                       <th className="w-[38%] pb-4 pr-2 text-left text-xs font-extrabold text-gray-800 sm:text-sm">
                         Item
                       </th>
@@ -369,15 +472,20 @@ const saveAsImage = async () => {
                       <th className="w-[24%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
                         Amount
                       </th>
+
                     </tr>
+
                   </thead>
 
                   <tbody>
+
                     {items.map((item, index) => (
+
                       <tr
                         key={index}
                         className="border-b border-gray-100"
                       >
+
                         <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
                           {item.name}
                         </td>
@@ -399,11 +507,17 @@ const saveAsImage = async () => {
                             "en-NG"
                           )}
                         </td>
+
                       </tr>
+
                     ))}
+
                   </tbody>
+
                 </table>
+
               </div>
+
             </div>
 
             {/* =========================
@@ -411,25 +525,33 @@ const saveAsImage = async () => {
             ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
+
               <div className="ml-auto w-full max-w-md space-y-5">
+
                 {/* GRAND TOTAL */}
 
                 <div className="flex items-center justify-between gap-5">
+
                   <span className="text-base font-bold text-gray-800 sm:text-lg">
                     Grand Total
                   </span>
 
                   <span className="whitespace-nowrap text-lg font-extrabold text-gray-950 sm:text-xl">
                     ₦
-                    {grandTotal.toLocaleString("en-NG")}
+                    {grandTotal.toLocaleString(
+                      "en-NG"
+                    )}
                   </span>
+
                 </div>
 
-                {/* PARTIAL PAYMENT ONLY */}
+                {/* PARTIAL PAYMENT */}
 
                 {paymentStatus === "Partially Paid" && (
                   <>
+
                     <div className="flex items-center justify-between gap-5">
+
                       <span className="text-base font-bold text-gray-800 sm:text-lg">
                         Amount Paid
                       </span>
@@ -440,9 +562,11 @@ const saveAsImage = async () => {
                           "en-NG"
                         )}
                       </span>
+
                     </div>
 
                     <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5">
+
                       <span className="text-base font-extrabold text-gray-800 sm:text-lg">
                         Balance Due
                       </span>
@@ -453,15 +577,22 @@ const saveAsImage = async () => {
                           "en-NG"
                         )}
                       </span>
+
                     </div>
+
                   </>
                 )}
+
               </div>
+
             </div>
 
-            {/* FOOTER */}
+            {/* =========================
+                FOOTER
+            ========================= */}
 
             <div className="px-5 py-7 text-center sm:px-10 sm:py-9">
+
               <p className="text-base font-extrabold text-gray-900 sm:text-lg">
                 Thank you for your business.
               </p>
@@ -469,7 +600,9 @@ const saveAsImage = async () => {
               <p className="mt-1 text-sm font-semibold text-gray-600">
                 Generated with BizzBill
               </p>
+
             </div>
+
           </div>
 
           {/* =========================
@@ -477,6 +610,7 @@ const saveAsImage = async () => {
           ========================= */}
 
           <div className="no-print mx-auto mt-5 grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2">
+
             <button
               type="button"
               onClick={saveAsImage}
@@ -492,7 +626,9 @@ const saveAsImage = async () => {
             >
               🖨 Print Invoice
             </button>
+
           </div>
+
         </main>
       </>
     );
@@ -504,10 +640,13 @@ const saveAsImage = async () => {
 
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
+
       <div className="mx-auto w-full max-w-5xl">
+
         {/* HEADER */}
 
         <div className="mb-6 flex items-center justify-between gap-3">
+
           <Link
             href="/"
             className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-900 shadow-sm transition hover:bg-gray-50"
@@ -518,11 +657,66 @@ const saveAsImage = async () => {
           <h1 className="text-xl font-extrabold text-gray-950 sm:text-2xl">
             Create Invoice
           </h1>
+
         </div>
 
         {/* FORM CARD */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
+
+          {/* BUSINESS PROFILE PREVIEW */}
+
+          <div className="mb-7 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+
+            <p className="text-xs font-extrabold uppercase tracking-wide text-blue-700">
+              Invoice From
+            </p>
+
+            {profileLoading ? (
+
+              <p className="mt-2 text-sm font-semibold text-gray-600">
+                Loading business information...
+              </p>
+
+            ) : businessProfile ? (
+
+              <div className="mt-2">
+
+                <p className="text-xl font-extrabold text-gray-950">
+                  {businessProfile.business_name ||
+                    "Business name not set"}
+                </p>
+
+                {businessProfile.address && (
+                  <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-700">
+                    {businessProfile.address}
+                  </p>
+                )}
+
+                <p className="mt-3 text-xs font-semibold text-blue-700">
+                  This information will automatically appear on your invoice.
+                </p>
+
+              </div>
+
+            ) : (
+
+              <div className="mt-2">
+
+                <p className="text-sm font-bold text-red-600">
+                  No business profile found.
+                </p>
+
+                <p className="mt-1 text-sm font-medium text-gray-600">
+                  Please complete your business profile before creating invoices.
+                </p>
+
+              </div>
+
+            )}
+
+          </div>
+
           <h2 className="mb-6 text-2xl font-extrabold text-gray-950">
             Invoice Details
           </h2>
@@ -530,9 +724,11 @@ const saveAsImage = async () => {
           {/* CUSTOMER DETAILS */}
 
           <div className="grid gap-5 sm:grid-cols-2">
+
             {/* CUSTOMER NAME */}
 
             <div>
+
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Customer name
               </label>
@@ -546,11 +742,13 @@ const saveAsImage = async () => {
                 placeholder="Customer name"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
             {/* CUSTOMER PHONE */}
 
             <div>
+
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Customer phone
               </label>
@@ -564,11 +762,13 @@ const saveAsImage = async () => {
                 placeholder="Customer phone"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
             {/* INVOICE NUMBER */}
 
             <div>
+
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Invoice number
               </label>
@@ -582,11 +782,13 @@ const saveAsImage = async () => {
                 placeholder="Invoice number"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
             {/* INVOICE DATE */}
 
             <div>
+
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Invoice date
               </label>
@@ -599,7 +801,9 @@ const saveAsImage = async () => {
                 }
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
+
           </div>
 
           {/* =========================
@@ -607,7 +811,9 @@ const saveAsImage = async () => {
           ========================= */}
 
           <div className="mt-8">
+
             <div className="mb-4 flex items-center justify-between gap-3">
+
               <h2 className="text-2xl font-extrabold text-gray-950">
                 Items
               </h2>
@@ -619,18 +825,24 @@ const saveAsImage = async () => {
               >
                 + Add Item
               </button>
+
             </div>
 
             <div className="space-y-4">
+
               {items.map((item, index) => (
+
                 <div
                   key={index}
                   className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
                 >
+
                   <div className="grid gap-4 sm:grid-cols-3">
+
                     {/* ITEM */}
 
                     <div>
+
                       <label className="mb-2 block text-sm font-extrabold text-gray-800">
                         Item
                       </label>
@@ -648,38 +860,43 @@ const saveAsImage = async () => {
                         placeholder="Item / Service"
                         className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
                       />
+
                     </div>
 
                     {/* QUANTITY */}
 
                     <div>
+
                       <label className="mb-2 block text-sm font-extrabold text-gray-800">
                         Quantity
                       </label>
 
                       <input
-  type="number"
-  min="1"
-  value={item.quantity}
-  onChange={(e) => {
-    const value = e.target.value;
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const value =
+                            e.target.value;
 
-    updateItem(
-      index,
-      "quantity",
-      value === "" ? "" : Number(value)
-    );
-  }}
-  placeholder="Quantity"
-  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
-/>
-
+                          updateItem(
+                            index,
+                            "quantity",
+                            value === ""
+                              ? ""
+                              : Number(value)
+                          );
+                        }}
+                        placeholder="Quantity"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
+                      />
 
                     </div>
 
                     {/* UNIT PRICE */}
 
                     <div>
+
                       <label className="mb-2 block text-sm font-extrabold text-gray-800">
                         Unit price
                       </label>
@@ -693,7 +910,9 @@ const saveAsImage = async () => {
                             index,
                             "unitPrice",
                             Math.max(
-                              Number(e.target.value),
+                              Number(
+                                e.target.value
+                              ),
                               0
                             )
                           )
@@ -701,12 +920,15 @@ const saveAsImage = async () => {
                         placeholder="₦0"
                         className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
                       />
+
                     </div>
+
                   </div>
 
                   {/* ITEM TOTAL + REMOVE */}
 
                   <div className="mt-4 flex items-center justify-between gap-4">
+
                     <p className="text-sm font-extrabold text-gray-900 sm:text-base">
                       Item total: ₦
                       {itemTotal(item).toLocaleString(
@@ -725,10 +947,15 @@ const saveAsImage = async () => {
                         Remove
                       </button>
                     )}
+
                   </div>
+
                 </div>
+
               ))}
+
             </div>
+
           </div>
 
           {/* =========================
@@ -736,16 +963,22 @@ const saveAsImage = async () => {
           ========================= */}
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+
             <div className="flex items-center justify-between gap-5">
+
               <span className="text-base font-extrabold text-gray-900">
                 Grand Total
               </span>
 
               <span className="whitespace-nowrap text-xl font-extrabold text-gray-950">
                 ₦
-                {grandTotal.toLocaleString("en-NG")}
+                {grandTotal.toLocaleString(
+                  "en-NG"
+                )}
               </span>
+
             </div>
+
           </div>
 
           {/* =========================
@@ -753,6 +986,7 @@ const saveAsImage = async () => {
           ========================= */}
 
           <div className="mt-8">
+
             <label className="mb-2 block text-sm font-extrabold text-gray-900">
               Payment status
             </label>
@@ -771,14 +1005,21 @@ const saveAsImage = async () => {
               }}
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
-              <option value="Unpaid">Unpaid</option>
 
-              <option value="Paid">Paid</option>
+              <option value="Unpaid">
+                Unpaid
+              </option>
+
+              <option value="Paid">
+                Paid
+              </option>
 
               <option value="Partially Paid">
                 Partially Paid
               </option>
+
             </select>
+
           </div>
 
           {/* =========================
@@ -786,7 +1027,9 @@ const saveAsImage = async () => {
           ========================= */}
 
           {paymentStatus === "Partially Paid" && (
+
             <div className="mt-5">
+
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Amount paid
               </label>
@@ -797,6 +1040,7 @@ const saveAsImage = async () => {
                 max={grandTotal}
                 value={amountPaid || ""}
                 onChange={(e) => {
+
                   const value = Number(
                     e.target.value
                   );
@@ -807,12 +1051,14 @@ const saveAsImage = async () => {
                       grandTotal
                     )
                   );
+
                 }}
                 placeholder="₦0"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
               />
 
               <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-red-50 p-4">
+
                 <span className="font-extrabold text-gray-800">
                   Balance Due
                 </span>
@@ -823,8 +1069,11 @@ const saveAsImage = async () => {
                     "en-NG"
                   )}
                 </span>
+
               </div>
+
             </div>
+
           )}
 
           {/* =========================
@@ -838,8 +1087,11 @@ const saveAsImage = async () => {
           >
             Generate Invoice
           </button>
+
         </div>
+
       </div>
+
     </main>
   );
 }
