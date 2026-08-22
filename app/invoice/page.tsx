@@ -31,21 +31,34 @@ export default function InvoicePage() {
   const [businessProfile, setBusinessProfile] =
     useState<BusinessProfile | null>(null);
 
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoading, setProfileLoading] =
+    useState(true);
 
   /* =========================
      INVOICE DETAILS
   ========================= */
 
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
+  const [customerName, setCustomerName] =
+    useState("");
+
+  const [customerPhone, setCustomerPhone] =
+    useState("");
+
+  const [invoiceNumber, setInvoiceNumber] =
+    useState("");
+
+  const [invoiceDate, setInvoiceDate] =
+    useState("");
 
   const [paymentStatus, setPaymentStatus] =
     useState<PaymentStatus>("Unpaid");
 
-  const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [amountPaid, setAmountPaid] =
+    useState<number>(0);
+
+  /* =========================
+     ITEMS
+  ========================= */
 
   const [items, setItems] = useState<Item[]>([
     {
@@ -70,21 +83,26 @@ export default function InvoicePage() {
         } = await supabase.auth.getUser();
 
         if (userError) {
-          console.error("User fetch error:", userError);
+          console.error(
+            "User fetch error:",
+            userError
+          );
           return;
         }
 
         if (!user) {
-          console.error("No logged-in user found.");
+          console.error(
+            "No logged-in user found."
+          );
           return;
         }
 
         /*
           We intentionally do NOT use .single()
-          because your database currently has
-          more than one profile for this user.
+          because there may be more than one
+          business profile for this user.
 
-          We take the newest profile instead.
+          We use the newest profile instead.
         */
 
         const { data, error } = await supabase
@@ -97,17 +115,25 @@ export default function InvoicePage() {
           .limit(1);
 
         if (error) {
-          console.error("Business profile fetch error:", error);
+          console.error(
+            "Business profile fetch error:",
+            error
+          );
           return;
         }
 
         if (data && data.length > 0) {
           setBusinessProfile(data[0]);
         } else {
-          console.log("No business profile found.");
+          console.log(
+            "No business profile found."
+          );
         }
       } catch (error) {
-        console.error("Profile fetch error:", error);
+        console.error(
+          "Profile fetch error:",
+          error
+        );
       } finally {
         setProfileLoading(false);
       }
@@ -168,27 +194,87 @@ export default function InvoicePage() {
   };
 
   const grandTotal = items.reduce(
-    (total, item) => total + itemTotal(item),
+    (total, item) =>
+      total + itemTotal(item),
     0
   );
 
   const balanceDue =
     paymentStatus === "Partially Paid"
-      ? Math.max(grandTotal - amountPaid, 0)
+      ? Math.max(
+          grandTotal - amountPaid,
+          0
+        )
       : 0;
+
+  /* =========================
+     AUTOMATIC INVOICE NUMBER
+  ========================= */
+
+  const getNextInvoiceNumber =
+    async () => {
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          console.error(
+            "Unable to get logged-in user:",
+            userError
+          );
+
+          alert(
+            "You must be logged in to generate an invoice."
+          );
+
+          return null;
+        }
+
+        const { data, error } =
+          await supabase.rpc(
+            "generate_invoice_number",
+            {
+              p_user_id: user.id,
+            }
+          );
+
+        if (error) {
+          console.error(
+            "Invoice number generation error:",
+            error
+          );
+
+          alert(
+            "Unable to generate invoice number."
+          );
+
+          return null;
+        }
+
+        return data as string;
+      } catch (error) {
+        console.error(
+          "Invoice number error:",
+          error
+        );
+
+        alert(
+          "Unable to generate invoice number."
+        );
+
+        return null;
+      }
+    };
 
   /* =========================
      GENERATE INVOICE
   ========================= */
 
-  const generateInvoice = () => {
+  const generateInvoice = async () => {
     if (!customerName.trim()) {
       alert("Please enter customer name.");
-      return;
-    }
-
-    if (!invoiceNumber.trim()) {
-      alert("Please enter invoice number.");
       return;
     }
 
@@ -197,10 +283,45 @@ export default function InvoicePage() {
       return;
     }
 
-    if (items.some((item) => !item.name.trim())) {
-      alert("Please enter a name for every item.");
+    if (
+      items.some(
+        (item) => !item.name.trim()
+      )
+    ) {
+      alert(
+        "Please enter a name for every item."
+      );
       return;
     }
+
+    if (
+      items.some(
+        (item) =>
+          item.quantity === "" ||
+          Number(item.quantity) <= 0
+      )
+    ) {
+      alert(
+        "Please enter a valid quantity for every item."
+      );
+      return;
+    }
+
+    /*
+      Generate the invoice number only when
+      the user actually creates the invoice.
+    */
+
+    const nextInvoiceNumber =
+      await getNextInvoiceNumber();
+
+    if (!nextInvoiceNumber) {
+      return;
+    }
+
+    setInvoiceNumber(
+      nextInvoiceNumber
+    );
 
     setGenerated(true);
 
@@ -219,11 +340,17 @@ export default function InvoicePage() {
   const saveAsImage = async () => {
     if (!invoiceRef.current) return;
 
-    const element = invoiceRef.current;
+    const element =
+      invoiceRef.current;
 
-    const originalWidth = element.style.width;
-    const originalMaxWidth = element.style.maxWidth;
-    const originalMinWidth = element.style.minWidth;
+    const originalWidth =
+      element.style.width;
+
+    const originalMaxWidth =
+      element.style.maxWidth;
+
+    const originalMinWidth =
+      element.style.minWidth;
 
     try {
       element.style.width = "720px";
@@ -234,16 +361,20 @@ export default function InvoicePage() {
         setTimeout(resolve, 100)
       );
 
-      const dataUrl = await toPng(element, {
-        width: 720,
-        height: element.scrollHeight,
-        pixelRatio: 2,
-        quality: 1,
-        backgroundColor: "#ffffff",
-        cacheBust: true,
-      });
+      const dataUrl = await toPng(
+        element,
+        {
+          width: 720,
+          height: element.scrollHeight,
+          pixelRatio: 2,
+          quality: 1,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+        }
+      );
 
-      const link = document.createElement("a");
+      const link =
+        document.createElement("a");
 
       link.download = `Invoice-${
         invoiceNumber || "invoice"
@@ -259,15 +390,20 @@ export default function InvoicePage() {
         "Unable to save the invoice as an image. Please try again."
       );
     } finally {
-      element.style.width = originalWidth;
-      element.style.maxWidth = originalMaxWidth;
-      element.style.minWidth = originalMinWidth;
+      element.style.width =
+        originalWidth;
+
+      element.style.maxWidth =
+        originalMaxWidth;
+
+      element.style.minWidth =
+        originalMinWidth;
     }
   };
 
-  /* =========================
+  /* ==================================================
      GENERATED INVOICE
-  ========================= */
+  ================================================== */
 
   if (generated) {
     return (
@@ -314,7 +450,9 @@ export default function InvoicePage() {
 
             <button
               type="button"
-              onClick={() => setGenerated(false)}
+              onClick={() =>
+                setGenerated(false)
+              }
               className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-50"
             >
               Edit Invoice
@@ -431,7 +569,8 @@ export default function InvoicePage() {
                   className={`mt-2 text-xl font-extrabold sm:text-2xl ${
                     paymentStatus === "Paid"
                       ? "text-green-600"
-                      : paymentStatus === "Partially Paid"
+                      : paymentStatus ===
+                        "Partially Paid"
                       ? "text-orange-600"
                       : "text-red-600"
                   }`}
@@ -479,38 +618,44 @@ export default function InvoicePage() {
 
                   <tbody>
 
-                    {items.map((item, index) => (
+                    {items.map(
+                      (item, index) => (
 
-                      <tr
-                        key={index}
-                        className="border-b border-gray-100"
-                      >
+                        <tr
+                          key={index}
+                          className="border-b border-gray-100"
+                        >
 
-                        <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
-                          {item.name}
-                        </td>
+                          <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
+                            {item.name}
+                          </td>
 
-                        <td className="py-5 text-center text-sm font-bold text-gray-950 sm:text-base">
-                          {item.quantity}
-                        </td>
+                          <td className="py-5 text-center text-sm font-bold text-gray-950 sm:text-base">
+                            {item.quantity}
+                          </td>
 
-                        <td className="whitespace-nowrap py-5 text-right text-sm font-semibold text-gray-950 sm:text-base">
-                          ₦
-                          {Number(
-                            item.unitPrice
-                          ).toLocaleString("en-NG")}
-                        </td>
+                          <td className="whitespace-nowrap py-5 text-right text-sm font-semibold text-gray-950 sm:text-base">
+                            ₦
+                            {Number(
+                              item.unitPrice
+                            ).toLocaleString(
+                              "en-NG"
+                            )}
+                          </td>
 
-                        <td className="whitespace-nowrap py-5 text-right text-sm font-extrabold text-gray-950 sm:text-base">
-                          ₦
-                          {itemTotal(item).toLocaleString(
-                            "en-NG"
-                          )}
-                        </td>
+                          <td className="whitespace-nowrap py-5 text-right text-sm font-extrabold text-gray-950 sm:text-base">
+                            ₦
+                            {itemTotal(
+                              item
+                            ).toLocaleString(
+                              "en-NG"
+                            )}
+                          </td>
 
-                      </tr>
+                        </tr>
 
-                    ))}
+                      )
+                    )}
 
                   </tbody>
 
@@ -547,7 +692,8 @@ export default function InvoicePage() {
 
                 {/* PARTIAL PAYMENT */}
 
-                {paymentStatus === "Partially Paid" && (
+                {paymentStatus ===
+                  "Partially Paid" && (
                   <>
 
                     <div className="flex items-center justify-between gap-5">
@@ -621,7 +767,9 @@ export default function InvoicePage() {
 
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() =>
+                window.print()
+              }
               className="rounded-xl bg-gray-900 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-gray-950"
             >
               🖨 Print Invoice
@@ -737,7 +885,9 @@ export default function InvoicePage() {
                 type="text"
                 value={customerName}
                 onChange={(e) =>
-                  setCustomerName(e.target.value)
+                  setCustomerName(
+                    e.target.value
+                  )
                 }
                 placeholder="Customer name"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -757,7 +907,9 @@ export default function InvoicePage() {
                 type="tel"
                 value={customerPhone}
                 onChange={(e) =>
-                  setCustomerPhone(e.target.value)
+                  setCustomerPhone(
+                    e.target.value
+                  )
                 }
                 placeholder="Customer phone"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -773,15 +925,18 @@ export default function InvoicePage() {
                 Invoice number
               </label>
 
-              <input
-                type="text"
-                value={invoiceNumber}
-                onChange={(e) =>
-                  setInvoiceNumber(e.target.value)
-                }
-                placeholder="Invoice number"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
+              <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-4 py-4">
+
+                <span className="text-base font-extrabold text-gray-950">
+                  {invoiceNumber ||
+                    "Automatically generated"}
+                </span>
+
+              </div>
+
+              <p className="mt-2 text-xs font-semibold text-gray-500">
+                Invoice number will be generated automatically.
+              </p>
 
             </div>
 
@@ -797,7 +952,9 @@ export default function InvoicePage() {
                 type="date"
                 value={invoiceDate}
                 onChange={(e) =>
-                  setInvoiceDate(e.target.value)
+                  setInvoiceDate(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
@@ -830,129 +987,143 @@ export default function InvoicePage() {
 
             <div className="space-y-4">
 
-              {items.map((item, index) => (
+              {items.map(
+                (item, index) => (
 
-                <div
-                  key={index}
-                  className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
-                >
+                  <div
+                    key={index}
+                    className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
+                  >
 
-                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-3">
 
-                    {/* ITEM */}
+                      {/* ITEM */}
 
-                    <div>
+                      <div>
 
-                      <label className="mb-2 block text-sm font-extrabold text-gray-800">
-                        Item
-                      </label>
+                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                          Item
+                        </label>
 
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) =>
-                          updateItem(
-                            index,
-                            "name",
-                            e.target.value
-                          )
-                        }
-                        placeholder="Item / Service"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
-                      />
-
-                    </div>
-
-                    {/* QUANTITY */}
-
-                    <div>
-
-                      <label className="mb-2 block text-sm font-extrabold text-gray-800">
-                        Quantity
-                      </label>
-
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const value =
-                            e.target.value;
-
-                          updateItem(
-                            index,
-                            "quantity",
-                            value === ""
-                              ? ""
-                              : Number(value)
-                          );
-                        }}
-                        placeholder="Quantity"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
-                      />
-
-                    </div>
-
-                    {/* UNIT PRICE */}
-
-                    <div>
-
-                      <label className="mb-2 block text-sm font-extrabold text-gray-800">
-                        Unit price
-                      </label>
-
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.unitPrice || ""}
-                        onChange={(e) =>
-                          updateItem(
-                            index,
-                            "unitPrice",
-                            Math.max(
-                              Number(
-                                e.target.value
-                              ),
-                              0
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) =>
+                            updateItem(
+                              index,
+                              "name",
+                              e.target.value
                             )
-                          )
-                        }
-                        placeholder="₦0"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
-                      />
+                          }
+                          placeholder="Item / Service"
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
+                        />
+
+                      </div>
+
+                      {/* QUANTITY */}
+
+                      <div>
+
+                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                          Quantity
+                        </label>
+
+                        <input
+                          type="number"
+                          min="1"
+                          value={
+                            item.quantity
+                          }
+                          onChange={(e) => {
+
+                            const value =
+                              e.target.value;
+
+                            updateItem(
+                              index,
+                              "quantity",
+                              value === ""
+                                ? ""
+                                : Number(value)
+                            );
+
+                          }}
+                          placeholder="Quantity"
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
+                        />
+
+                      </div>
+
+                      {/* UNIT PRICE */}
+
+                      <div>
+
+                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                          Unit price
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0"
+                          value={
+                            item.unitPrice ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            updateItem(
+                              index,
+                              "unitPrice",
+                              Math.max(
+                                Number(
+                                  e.target.value
+                                ),
+                                0
+                              )
+                            )
+                          }
+                          placeholder="₦0"
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
+                        />
+
+                      </div>
+
+                    </div>
+
+                    {/* ITEM TOTAL + REMOVE */}
+
+                    <div className="mt-4 flex items-center justify-between gap-4">
+
+                      <p className="text-sm font-extrabold text-gray-900 sm:text-base">
+                        Item total: ₦
+                        {itemTotal(
+                          item
+                        ).toLocaleString(
+                          "en-NG"
+                        )}
+                      </p>
+
+                      {items.length >
+                        1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeItem(
+                              index
+                            )
+                          }
+                          className="text-sm font-extrabold text-red-600 transition hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
 
                     </div>
 
                   </div>
 
-                  {/* ITEM TOTAL + REMOVE */}
-
-                  <div className="mt-4 flex items-center justify-between gap-4">
-
-                    <p className="text-sm font-extrabold text-gray-900 sm:text-base">
-                      Item total: ₦
-                      {itemTotal(item).toLocaleString(
-                        "en-NG"
-                      )}
-                    </p>
-
-                    {items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeItem(index)
-                        }
-                        className="text-sm font-extrabold text-red-600 transition hover:text-red-700"
-                      >
-                        Remove
-                      </button>
-                    )}
-
-                  </div>
-
-                </div>
-
-              ))}
+                )
+              )}
 
             </div>
 
@@ -994,14 +1165,19 @@ export default function InvoicePage() {
             <select
               value={paymentStatus}
               onChange={(e) => {
+
                 const status =
                   e.target.value as PaymentStatus;
 
                 setPaymentStatus(status);
 
-                if (status !== "Partially Paid") {
+                if (
+                  status !==
+                  "Partially Paid"
+                ) {
                   setAmountPaid(0);
                 }
+
               }}
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
@@ -1026,7 +1202,8 @@ export default function InvoicePage() {
               PARTIAL PAYMENT
           ========================= */}
 
-          {paymentStatus === "Partially Paid" && (
+          {paymentStatus ===
+            "Partially Paid" && (
 
             <div className="mt-5">
 
@@ -1038,16 +1215,22 @@ export default function InvoicePage() {
                 type="number"
                 min="0"
                 max={grandTotal}
-                value={amountPaid || ""}
+                value={
+                  amountPaid || ""
+                }
                 onChange={(e) => {
 
-                  const value = Number(
-                    e.target.value
-                  );
+                  const value =
+                    Number(
+                      e.target.value
+                    );
 
                   setAmountPaid(
                     Math.min(
-                      Math.max(value, 0),
+                      Math.max(
+                        value,
+                        0
+                      ),
                       grandTotal
                     )
                   );
