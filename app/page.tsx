@@ -11,8 +11,8 @@ export default function Home() {
           </h1>
 
          <Link
-  href="/documents"
-  aria-label="My Documents"
+  href="/signup"
+  aria-label="Sign Up"
   className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 shadow-sm transition hover:bg-gray-50"
 >
   <svg
@@ -30,6 +30,8 @@ export default function Home() {
     />
   </svg>
 </Link>
+
+
 
 
         </div>
