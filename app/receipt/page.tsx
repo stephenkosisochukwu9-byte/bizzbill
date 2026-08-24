@@ -140,6 +140,60 @@ export default function ReceiptPage() {
   }, [supabase]);
 
   /* =========================
+   AUTOMATIC RECEIPT NUMBER
+========================= */
+
+useEffect(() => {
+  const generateReceiptNumber = async () => {
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error(
+          "User fetch error:",
+          userError
+        );
+        return;
+      }
+
+      if (!user) {
+        console.error(
+          "No logged-in user found."
+        );
+        return;
+      }
+
+      const { data, error } = await supabase.rpc(
+        "get_next_receipt_number"
+      );
+
+      if (error) {
+        console.error(
+          "Receipt number generation error:",
+          error
+        );
+        return;
+      }
+
+      if (data) {
+        setReceiptNumber(data);
+      }
+    } catch (error) {
+      console.error(
+        "Receipt number error:",
+        error
+      );
+    }
+  };
+
+  generateReceiptNumber();
+}, [supabase]);
+
+
+  /* =========================
      ITEM TOTAL
   ========================= */
 
@@ -236,10 +290,13 @@ export default function ReceiptPage() {
       return;
     }
 
-    if (!receiptNumber.trim()) {
-      alert("Please enter receipt number.");
-      return;
-    }
+   if (!receiptNumber.trim()) {
+  alert(
+    "Unable to generate receipt number. Please refresh the page and try again."
+  );
+  return;
+}
+
 
     if (!receiptDate) {
       alert("Please select receipt date.");
@@ -814,27 +871,7 @@ export default function ReceiptPage() {
 
             </div>
 
-            {/* RECEIPT NUMBER */}
-
-            <div>
-
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
-                Receipt number
-              </label>
-
-              <input
-                type="text"
-                value={receiptNumber}
-                onChange={(e) =>
-                  setReceiptNumber(
-                    e.target.value
-                  )
-                }
-                placeholder="Receipt number"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
+           
 
             {/* DATE */}
 
