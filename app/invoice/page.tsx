@@ -177,13 +177,27 @@ export default function InvoicePage() {
       ? Math.max(grandTotal - amountPaid, 0)
       : 0;
 
-  /* =========================
-     GENERATE INVOICE
-  ========================= */
+ /* =========================
+   GENERATE INVOICE
+========================= */
 
-  const generateInvoice = async () => {
+const generateInvoice = async () => {
+  if (!businessProfile?.business_name?.trim()) {
+    alert(
+      "Please complete your business profile first."
+    );
+    return;
+  }
+
   if (!customerName.trim()) {
     alert("Please enter customer name.");
+    return;
+  }
+
+  if (!invoiceNumber.trim()) {
+    alert(
+      "Unable to generate invoice number. Please refresh the page and try again."
+    );
     return;
   }
 
@@ -192,8 +206,14 @@ export default function InvoicePage() {
     return;
   }
 
-  if (items.some((item) => !item.name.trim())) {
-    alert("Please enter a name for every item.");
+  if (
+    items.some(
+      (item) => !item.name.trim()
+    )
+  ) {
+    alert(
+      "Please enter a name for every item."
+    );
     return;
   }
 
@@ -204,51 +224,117 @@ export default function InvoicePage() {
         Number(item.quantity) <= 0
     )
   ) {
-    alert("Please enter a valid quantity for every item.");
+    alert(
+      "Please enter a valid quantity for every item."
+    );
     return;
   }
 
   try {
+    /* =========================
+       GET CURRENT USER
+    ========================= */
+
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user) {
-      alert("You must be logged in to generate an invoice.");
-      return;
-    }
-
-    /*
-      Ask Supabase to generate the next
-      invoice number for this user.
-    */
-    const { data, error } = await supabase.rpc(
-      "get_next_invoice_number"
-    );
-
-    if (error) {
+    if (userError) {
       console.error(
-        "Invoice number generation error:",
-        error
+        "User fetch error:",
+        userError
       );
 
       alert(
-        "Unable to generate invoice number. Please try again."
+        "Unable to verify your account. Please try again."
       );
 
       return;
     }
 
-    if (!data) {
+    if (!user) {
       alert(
-        "Invoice number could not be generated. Please try again."
+        "You must be logged in to generate an invoice."
       );
 
       return;
     }
 
-    setInvoiceNumber(data);
+    /* =========================
+       SAVE INVOICE
+    ========================= */
+
+    const savedAmountPaid =
+      paymentStatus === "Paid"
+        ? grandTotal
+        : paymentStatus === "Partially Paid"
+        ? amountPaid
+        : 0;
+
+    const savedBalanceDue =
+      paymentStatus === "Unpaid"
+        ? grandTotal
+        : paymentStatus === "Partially Paid"
+        ? Math.max(
+            grandTotal - amountPaid,
+            0
+          )
+        : 0;
+
+    const { error: insertError } =
+      await supabase
+        .from("documents")
+        .insert({
+          user_id: user.id,
+
+          document_type: "invoice",
+
+          document_number: invoiceNumber,
+
+          customer_name: customerName,
+
+          customer_phone:
+            customerPhone || null,
+
+          document_date: invoiceDate,
+
+          items: items,
+
+          total_amount: grandTotal,
+
+          amount_paid: savedAmountPaid,
+
+          balance_due: savedBalanceDue,
+
+          payment_status:
+            paymentStatus,
+
+          payment_method: null,
+
+          business_name:
+            businessProfile.business_name,
+
+          business_address:
+            businessProfile.address,
+        });
+
+    if (insertError) {
+      console.error(
+        "Invoice save error:",
+        insertError
+      );
+
+      alert(
+        "Unable to save invoice. Please try again."
+      );
+
+      return;
+    }
+
+    /* =========================
+       SHOW GENERATED INVOICE
+    ========================= */
 
     setGenerated(true);
 
@@ -258,10 +344,9 @@ export default function InvoicePage() {
         behavior: "smooth",
       });
     }, 100);
-
   } catch (error) {
     console.error(
-      "Generate invoice error:",
+      "Invoice generation error:",
       error
     );
 
