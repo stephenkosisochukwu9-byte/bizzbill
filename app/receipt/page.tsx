@@ -17,6 +17,11 @@ type PaymentMethod =
   | "Card"
   | "Other";
 
+type PaymentStatus =
+  | "Unpaid"
+  | "Paid"
+  | "Partially Paid";
+
 type BusinessProfile = {
   business_name: string | null;
   address: string | null;
@@ -27,6 +32,7 @@ export default function ReceiptPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const [generated, setGenerated] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   /* =========================
      BUSINESS PROFILE
@@ -95,9 +101,8 @@ export default function ReceiptPage() {
         }
 
         /*
-          We do not use .single() because your
-          database currently has more than one
-          business profile for this user.
+          We do not use .single() because there
+          may be more than one business profile.
 
           We use the newest profile instead.
         */
@@ -140,60 +145,6 @@ export default function ReceiptPage() {
   }, [supabase]);
 
   /* =========================
-   AUTOMATIC RECEIPT NUMBER
-========================= */
-
-useEffect(() => {
-  const generateReceiptNumber = async () => {
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error(
-          "User fetch error:",
-          userError
-        );
-        return;
-      }
-
-      if (!user) {
-        console.error(
-          "No logged-in user found."
-        );
-        return;
-      }
-
-      const { data, error } = await supabase.rpc(
-        "get_next_receipt_number"
-      );
-
-      if (error) {
-        console.error(
-          "Receipt number generation error:",
-          error
-        );
-        return;
-      }
-
-      if (data) {
-        setReceiptNumber(data);
-      }
-    } catch (error) {
-      console.error(
-        "Receipt number error:",
-        error
-      );
-    }
-  };
-
-  generateReceiptNumber();
-}, [supabase]);
-
-
-  /* =========================
      ITEM TOTAL
   ========================= */
 
@@ -215,7 +166,18 @@ useEffect(() => {
   );
 
   /* =========================
-     BALANCE
+     PAYMENT STATUS
+  ========================= */
+
+  const paymentStatus: PaymentStatus =
+    amountPaid >= grandTotal && grandTotal > 0
+      ? "Paid"
+      : amountPaid > 0
+      ? "Partially Paid"
+      : "Unpaid";
+
+  /* =========================
+     BALANCE DUE
   ========================= */
 
   const balanceDue = Math.max(
@@ -274,10 +236,22 @@ useEffect(() => {
   };
 
   /* =========================
-     GENERATE RECEIPT
+     GENERATE + SAVE RECEIPT
   ========================= */
 
-  const generateReceipt = () => {
+  const generateReceipt = async () => {
+    /* =========================
+       PREVENT DOUBLE CLICK
+    ========================= */
+
+    if (saving) {
+      return;
+    }
+
+    /* =========================
+       BASIC VALIDATION
+    ========================= */
+
     if (!businessProfile?.business_name?.trim()) {
       alert(
         "Please complete your business profile first."
@@ -289,14 +263,6 @@ useEffect(() => {
       alert("Please enter customer name.");
       return;
     }
-
-   if (!receiptNumber.trim()) {
-  alert(
-    "Unable to generate receipt number. Please refresh the page and try again."
-  );
-  return;
-}
-
 
     if (!receiptDate) {
       alert("Please select receipt date.");
@@ -327,14 +293,189 @@ useEffect(() => {
       return;
     }
 
-    setGenerated(true);
+    if (
+      items.some(
+        (item) =>
+          Number(item.unitPrice) < 0
+      )
+    ) {
+      alert(
+        "Please enter a valid unit price for every item."
+      );
+      return;
+    }
 
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }, 100);
+    if (grandTotal <= 0) {
+      alert(
+        "Receipt total must be greater than ₦0."
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      /* =========================
+         GET CURRENT USER
+      ========================= */
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error(
+          "User fetch error:",
+          userError
+        );
+
+        alert(
+          "Unable to verify your account. Please try again."
+        );
+
+        return;
+      }
+
+      if (!user) {
+        alert(
+          "You must be logged in to generate a receipt."
+        );
+
+        return;
+      }
+
+      /* =========================
+         GENERATE RECEIPT NUMBER
+      ========================= */
+
+      const {
+        data: generatedNumber,
+        error: numberError,
+      } = await supabase.rpc(
+        "get_next_receipt_number"
+      );
+
+      if (numberError) {
+        console.error(
+          "Receipt number generation error:",
+          numberError
+        );
+
+        alert(
+          "Unable to generate receipt number. Please try again."
+        );
+
+        return;
+      }
+
+      if (!generatedNumber) {
+        console.error(
+          "Receipt number was empty."
+        );
+
+        alert(
+          "Unable to generate receipt number. Please try again."
+        );
+
+        return;
+      }
+
+      const newReceiptNumber =
+        String(generatedNumber);
+
+      /* =========================
+         SET RECEIPT NUMBER
+      ========================= */
+
+      setReceiptNumber(
+        newReceiptNumber
+      );
+
+      /* =========================
+         SAVE RECEIPT
+      ========================= */
+
+      const { error: insertError } =
+        await supabase
+          .from("documents")
+          .insert({
+            user_id: user.id,
+
+            document_type: "receipt",
+
+            document_number:
+              newReceiptNumber,
+
+            customer_name:
+              customerName,
+
+            customer_phone: null,
+
+            document_date:
+              receiptDate,
+
+            items: items,
+
+            total_amount:
+              grandTotal,
+
+            amount_paid:
+              amountPaid,
+
+            balance_due:
+              balanceDue,
+
+            payment_status:
+              paymentStatus,
+
+            payment_method:
+              paymentMethod,
+
+            business_name:
+              businessProfile.business_name,
+
+            business_address:
+              businessProfile.address,
+          });
+
+      if (insertError) {
+        console.error(
+          "Receipt save error:",
+          insertError
+        );
+
+        alert(
+          "Unable to save receipt. Please try again."
+        );
+
+        return;
+      }
+
+      /* =========================
+         SHOW GENERATED RECEIPT
+      ========================= */
+
+      setGenerated(true);
+
+      setTimeout(() => {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      }, 100);
+    } catch (error) {
+      console.error(
+        "Receipt generation error:",
+        error
+      );
+
+      alert(
+        "Something went wrong while generating the receipt."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   /* =========================
@@ -342,7 +483,9 @@ useEffect(() => {
   ========================= */
 
   const saveAsImage = async () => {
-    if (!receiptRef.current) return;
+    if (!receiptRef.current) {
+      return;
+    }
 
     const element = receiptRef.current;
 
@@ -443,7 +586,7 @@ useEffect(() => {
 
             <Link
               href="/"
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-900 shadow-sm transition hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-950 shadow-sm transition hover:bg-gray-50"
             >
               ← Home
             </Link>
@@ -465,12 +608,10 @@ useEffect(() => {
           <div
             ref={receiptRef}
             data-print-receipt
-            className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
+            className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-950 shadow-lg"
           >
 
-            {/* =========================
-                RECEIPT HEADER
-            ========================= */}
+            {/* RECEIPT HEADER */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
@@ -486,12 +627,12 @@ useEffect(() => {
                   </h1>
 
                   {businessProfile?.address && (
-                    <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-700 sm:text-base">
+                    <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-800 sm:text-base">
                       {businessProfile.address}
                     </p>
                   )}
 
-                  <p className="mt-2 text-sm font-semibold text-gray-700 sm:text-base">
+                  <p className="mt-2 text-sm font-semibold text-gray-800 sm:text-base">
                     Payment Receipt
                   </p>
 
@@ -505,7 +646,7 @@ useEffect(() => {
                     RECEIPT
                   </h2>
 
-                  <div className="mt-3 space-y-1.5 text-sm text-gray-700 sm:text-base">
+                  <div className="mt-3 space-y-1.5 text-sm text-gray-800 sm:text-base">
 
                     <p>
                       Receipt No:{" "}
@@ -529,9 +670,7 @@ useEffect(() => {
 
             </div>
 
-            {/* =========================
-                CUSTOMER + PAYMENT
-            ========================= */}
+            {/* CUSTOMER + PAYMENT */}
 
             <div className="grid grid-cols-1 gap-7 border-b border-gray-200 px-5 py-7 sm:grid-cols-2 sm:px-10 sm:py-9">
 
@@ -539,7 +678,7 @@ useEffect(() => {
 
               <div>
 
-                <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-gray-700 sm:text-sm">
                   Received From
                 </p>
 
@@ -553,11 +692,11 @@ useEffect(() => {
 
               <div className="sm:text-right">
 
-                <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-gray-700 sm:text-sm">
                   Payment Method
                 </p>
 
-                <p className="mt-2 text-xl font-extrabold text-blue-600 sm:text-2xl">
+                <p className="mt-2 text-xl font-extrabold text-blue-700 sm:text-2xl">
                   {paymentMethod}
                 </p>
 
@@ -565,9 +704,7 @@ useEffect(() => {
 
             </div>
 
-            {/* =========================
-                ITEMS
-            ========================= */}
+            {/* ITEMS */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
@@ -579,19 +716,19 @@ useEffect(() => {
 
                     <tr className="border-b-2 border-gray-300">
 
-                      <th className="w-[38%] pb-4 pr-2 text-left text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[38%] pb-4 pr-2 text-left text-xs font-extrabold text-gray-900 sm:text-sm">
                         Item / Service
                       </th>
 
-                      <th className="w-[13%] pb-4 text-center text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[13%] pb-4 text-center text-xs font-extrabold text-gray-900 sm:text-sm">
                         Qty
                       </th>
 
-                      <th className="w-[25%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[25%] pb-4 text-right text-xs font-extrabold text-gray-900 sm:text-sm">
                         Unit Price
                       </th>
 
-                      <th className="w-[24%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
+                      <th className="w-[24%] pb-4 text-right text-xs font-extrabold text-gray-900 sm:text-sm">
                         Total
                       </th>
 
@@ -648,9 +785,7 @@ useEffect(() => {
 
             </div>
 
-            {/* =========================
-                TOTALS
-            ========================= */}
+            {/* TOTALS */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
@@ -660,7 +795,7 @@ useEffect(() => {
 
                 <div className="flex items-center justify-between gap-5">
 
-                  <span className="text-base font-bold text-gray-800 sm:text-lg">
+                  <span className="text-base font-bold text-gray-900 sm:text-lg">
                     Total Amount
                   </span>
 
@@ -677,7 +812,7 @@ useEffect(() => {
 
                 <div className="flex items-center justify-between gap-5">
 
-                  <span className="text-base font-bold text-gray-800 sm:text-lg">
+                  <span className="text-base font-bold text-gray-900 sm:text-lg">
                     Amount Paid
                   </span>
 
@@ -694,7 +829,7 @@ useEffect(() => {
 
                 <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5">
 
-                  <span className="text-base font-extrabold text-gray-800 sm:text-lg">
+                  <span className="text-base font-extrabold text-gray-900 sm:text-lg">
                     Balance Due
                   </span>
 
@@ -707,21 +842,42 @@ useEffect(() => {
 
                 </div>
 
+                {/* PAYMENT STATUS */}
+
+                <div className="flex items-center justify-between gap-5">
+
+                  <span className="text-base font-bold text-gray-900 sm:text-lg">
+                    Payment Status
+                  </span>
+
+                  <span
+                    className={`text-base font-extrabold sm:text-lg ${
+                      paymentStatus === "Paid"
+                        ? "text-green-600"
+                        : paymentStatus ===
+                          "Partially Paid"
+                        ? "text-orange-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {paymentStatus}
+                  </span>
+
+                </div>
+
               </div>
 
             </div>
 
-            {/* =========================
-                FOOTER
-            ========================= */}
+            {/* FOOTER */}
 
             <div className="px-5 py-7 text-center sm:px-10 sm:py-9">
 
-              <p className="text-base font-extrabold text-gray-900 sm:text-lg">
+              <p className="text-base font-extrabold text-gray-950 sm:text-lg">
                 Thank you for your patronage.
               </p>
 
-              <p className="mt-1 text-sm font-semibold text-gray-600">
+              <p className="mt-1 text-sm font-semibold text-gray-700">
                 Generated with BizzBill
               </p>
 
@@ -773,7 +929,7 @@ useEffect(() => {
 
           <Link
             href="/"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-900 shadow-sm transition hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-extrabold text-gray-950 shadow-sm transition hover:bg-gray-50"
           >
             ← Home
           </Link>
@@ -792,13 +948,13 @@ useEffect(() => {
 
           <div className="mb-7 rounded-2xl border border-blue-100 bg-blue-50 p-5">
 
-            <p className="text-xs font-extrabold uppercase tracking-wide text-blue-700">
+            <p className="text-xs font-extrabold uppercase tracking-wide text-blue-800">
               Receipt From
             </p>
 
             {profileLoading ? (
 
-              <p className="mt-2 text-sm font-semibold text-gray-600">
+              <p className="mt-2 text-sm font-semibold text-gray-700">
                 Loading business information...
               </p>
 
@@ -812,12 +968,12 @@ useEffect(() => {
                 </p>
 
                 {businessProfile.address && (
-                  <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-700">
+                  <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-800">
                     {businessProfile.address}
                   </p>
                 )}
 
-                <p className="mt-3 text-xs font-semibold text-blue-700">
+                <p className="mt-3 text-xs font-semibold text-blue-800">
                   This information will automatically appear on your receipt.
                 </p>
 
@@ -831,7 +987,7 @@ useEffect(() => {
                   No business profile found.
                 </p>
 
-                <p className="mt-1 text-sm font-medium text-gray-600">
+                <p className="mt-1 text-sm font-medium text-gray-700">
                   Please complete your business profile before creating receipts.
                 </p>
 
@@ -853,7 +1009,7 @@ useEffect(() => {
 
             <div>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              <label className="mb-2 block text-sm font-extrabold text-gray-950">
                 Customer name
               </label>
 
@@ -871,13 +1027,11 @@ useEffect(() => {
 
             </div>
 
-           
-
             {/* DATE */}
 
             <div>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              <label className="mb-2 block text-sm font-extrabold text-gray-950">
                 Date
               </label>
 
@@ -898,7 +1052,7 @@ useEffect(() => {
 
             <div>
 
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
+              <label className="mb-2 block text-sm font-extrabold text-gray-950">
                 Payment method
               </label>
 
@@ -906,8 +1060,7 @@ useEffect(() => {
                 value={paymentMethod}
                 onChange={(e) =>
                   setPaymentMethod(
-                    e.target
-                      .value as PaymentMethod
+                    e.target.value as PaymentMethod
                   )
                 }
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -969,7 +1122,7 @@ useEffect(() => {
 
                     <div>
 
-                      <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                      <label className="mb-2 block text-sm font-extrabold text-gray-900">
                         Item / Service
                       </label>
 
@@ -997,7 +1150,7 @@ useEffect(() => {
 
                       <div>
 
-                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                        <label className="mb-2 block text-sm font-extrabold text-gray-900">
                           Quantity
                         </label>
 
@@ -1031,7 +1184,7 @@ useEffect(() => {
 
                       <div>
 
-                        <label className="mb-2 block text-sm font-extrabold text-gray-800">
+                        <label className="mb-2 block text-sm font-extrabold text-gray-900">
                           Unit price
                         </label>
 
@@ -1051,7 +1204,10 @@ useEffect(() => {
                               "unitPrice",
                               value === ""
                                 ? 0
-                                : Number(value)
+                                : Math.max(
+                                    Number(value),
+                                    0
+                                  )
                             );
 
                           }}
@@ -1067,7 +1223,7 @@ useEffect(() => {
 
                     <div className="mt-4 flex items-center justify-between gap-4">
 
-                      <p className="text-sm font-extrabold text-gray-900 sm:text-base">
+                      <p className="text-sm font-extrabold text-gray-950 sm:text-base">
                         Item total: ₦
                         {itemTotal(
                           item
@@ -1107,7 +1263,7 @@ useEffect(() => {
 
             <div className="flex items-center justify-between gap-5">
 
-              <span className="text-base font-extrabold text-gray-900">
+              <span className="text-base font-extrabold text-gray-950">
                 Total Amount
               </span>
 
@@ -1122,50 +1278,11 @@ useEffect(() => {
 
           </div>
 
-          {/* PAYMENT INFO */}
+          {/* AMOUNT PAID */}
 
           <div className="mt-8">
 
-            <label className="mb-2 block text-sm font-extrabold text-gray-900">
-              Payment method
-            </label>
-
-            <select
-              value={paymentMethod}
-              onChange={(e) =>
-                setPaymentMethod(
-                  e.target
-                    .value as PaymentMethod
-                )
-              }
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            >
-
-              <option value="Cash">
-                Cash
-              </option>
-
-              <option value="Bank Transfer">
-                Bank Transfer
-              </option>
-
-              <option value="Card">
-                Card
-              </option>
-
-              <option value="Other">
-                Other
-              </option>
-
-            </select>
-
-          </div>
-
-          {/* AMOUNT PAID */}
-
-          <div className="mt-5">
-
-            <label className="mb-2 block text-sm font-extrabold text-gray-900">
+            <label className="mb-2 block text-sm font-extrabold text-gray-950">
               Amount paid
             </label>
 
@@ -1207,7 +1324,7 @@ useEffect(() => {
 
           <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-red-50 p-4">
 
-            <span className="font-extrabold text-gray-800">
+            <span className="font-extrabold text-gray-900">
               Balance Due
             </span>
 
@@ -1220,14 +1337,40 @@ useEffect(() => {
 
           </div>
 
+          {/* PAYMENT STATUS PREVIEW */}
+
+          <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-gray-50 p-4">
+
+            <span className="font-extrabold text-gray-900">
+              Payment Status
+            </span>
+
+            <span
+              className={`font-extrabold ${
+                paymentStatus === "Paid"
+                  ? "text-green-600"
+                  : paymentStatus ===
+                    "Partially Paid"
+                  ? "text-orange-600"
+                  : "text-red-600"
+              }`}
+            >
+              {paymentStatus}
+            </span>
+
+          </div>
+
           {/* GENERATE */}
 
           <button
             type="button"
             onClick={generateReceipt}
-            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm transition hover:bg-blue-700"
+            disabled={saving}
+            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Generate Receipt
+            {saving
+              ? "Saving Receipt..."
+              : "Generate Receipt"}
           </button>
 
         </div>
@@ -1237,4 +1380,3 @@ useEffect(() => {
     </main>
   );
 }
-
