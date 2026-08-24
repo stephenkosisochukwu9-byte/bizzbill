@@ -16,27 +16,52 @@ type Profile = {
 export default function AccountPage() {
   const supabase = createClient();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef =
+    useRef<HTMLInputElement>(null);
 
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [user, setUser] =
+    useState<any>(null);
 
-  const [name, setName] = useState("");
-  const [businessName, setBusinessName] = useState("");
-  const [address, setAddress] = useState("");
-  const [socialHandle, setSocialHandle] = useState("");
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
+
+  const [name, setName] =
+    useState("");
+
+  const [businessName, setBusinessName] =
+    useState("");
+
+  const [address, setAddress] =
+    useState("");
+
+  const [socialHandle, setSocialHandle] =
+    useState("");
 
   /* =========================
      LOGO
   ========================= */
 
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [removeLogo, setRemoveLogo] = useState(false);
+  const [logoUrl, setLogoUrl] =
+    useState<string | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] =
+    useState<File | null>(null);
+
+  const [logoPreview, setLogoPreview] =
+    useState<string | null>(null);
+
+  const [removeLogo, setRemoveLogo] =
+    useState(false);
+
+  /* =========================
+     LOADING
+  ========================= */
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
 
   /* =========================
      LOAD ACCOUNT
@@ -57,27 +82,49 @@ export default function AccountPage() {
       }
 
       setUser(user);
-      setName(user.user_metadata?.name || "");
 
-      const { data, error } = await supabase
+      setName(
+        user.user_metadata?.name || ""
+      );
+
+      const {
+        data,
+        error,
+      } = await supabase
         .from("business_profiles")
         .select("*")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (error) {
-        console.error("Account profile error:", error);
+        console.error(
+          "Account profile error:",
+          error
+        );
       }
 
       if (data) {
         setProfile(data);
 
-        setBusinessName(data.business_name || "");
-        setAddress(data.address || "");
-        setSocialHandle(data.social_handle || "");
+        setBusinessName(
+          data.business_name || ""
+        );
 
-        setLogoUrl(data.logo_url || null);
-        setLogoPreview(data.logo_url || null);
+        setAddress(
+          data.address || ""
+        );
+
+        setSocialHandle(
+          data.social_handle || ""
+        );
+
+        setLogoUrl(
+          data.logo_url || null
+        );
+
+        setLogoPreview(
+          data.logo_url || null
+        );
       }
 
       setLoading(false);
@@ -93,32 +140,64 @@ export default function AccountPage() {
   const handleLogoChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
+    const file =
+      e.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    /* Only allow images */
+    /* ONLY IMAGES */
 
     if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
+      alert(
+        "Please select an image file."
+      );
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value =
+          "";
+      }
+
       return;
     }
 
-    /* Keep logo reasonably small */
+    /* MAX 5MB */
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Logo must be smaller than 5MB.");
+    if (
+      file.size >
+      5 * 1024 * 1024
+    ) {
+      alert(
+        "Logo must be smaller than 5MB."
+      );
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value =
+          "";
+      }
+
       return;
     }
+
+    /* CREATE PREVIEW */
+
+    if (logoPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(
+        logoPreview
+      );
+    }
+
+    const previewUrl =
+      URL.createObjectURL(file);
 
     setLogoFile(file);
+
+    setLogoPreview(
+      previewUrl
+    );
+
     setRemoveLogo(false);
-
-    const previewUrl = URL.createObjectURL(file);
-
-    setLogoPreview(previewUrl);
   };
 
   /* =========================
@@ -126,12 +205,23 @@ export default function AccountPage() {
   ========================= */
 
   const handleRemoveLogo = () => {
+    if (
+      logoPreview?.startsWith("blob:")
+    ) {
+      URL.revokeObjectURL(
+        logoPreview
+      );
+    }
+
     setLogoFile(null);
+
     setLogoPreview(null);
+
     setRemoveLogo(true);
 
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value =
+        "";
     }
   };
 
@@ -139,10 +229,20 @@ export default function AccountPage() {
      SAVE ACCOUNT
   ========================= */
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (
+    e: React.FormEvent
+  ) => {
     e.preventDefault();
 
     if (!user) {
+      return;
+    }
+
+    if (!businessName.trim()) {
+      alert(
+        "Please enter your business name."
+      );
+
       return;
     }
 
@@ -153,7 +253,9 @@ export default function AccountPage() {
          UPDATE USER NAME
       ========================= */
 
-      const { error: userError } =
+      const {
+        error: userError,
+      } =
         await supabase.auth.updateUser({
           data: {
             name,
@@ -166,13 +268,14 @@ export default function AccountPage() {
       }
 
       /* =========================
-         LOGO URL
+         START WITH CURRENT LOGO
       ========================= */
 
-      let finalLogoUrl = logoUrl;
+      let finalLogoUrl =
+        logoUrl;
 
       /* =========================
-         REMOVE EXISTING LOGO
+         REMOVE LOGO
       ========================= */
 
       if (removeLogo) {
@@ -185,20 +288,33 @@ export default function AccountPage() {
 
       if (logoFile) {
         const fileExtension =
-          logoFile.name.split(".").pop()?.toLowerCase() ||
+          logoFile.name
+            .split(".")
+            .pop()
+            ?.toLowerCase() ||
           "png";
 
-        const filePath = `${user.id}/logo-${Date.now()}.${fileExtension}`;
+        const filePath =
+          `${user.id}/logo-${Date.now()}.${fileExtension}`;
 
         const {
           error: uploadError,
-        } = await supabase.storage
-          .from("business-logos")
-          .upload(filePath, logoFile, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: logoFile.type,
-          });
+        } =
+          await supabase.storage
+            .from("business-logos")
+            .upload(
+              filePath,
+              logoFile,
+              {
+                cacheControl:
+                  "3600",
+
+                upsert: false,
+
+                contentType:
+                  logoFile.type,
+              }
+            );
 
         if (uploadError) {
           console.error(
@@ -214,47 +330,87 @@ export default function AccountPage() {
         }
 
         /* =========================
-           GET PUBLIC LOGO URL
+           GET PUBLIC URL
         ========================= */
 
         const {
           data: publicUrlData,
-        } = supabase.storage
-          .from("business-logos")
-          .getPublicUrl(filePath);
+        } =
+          supabase.storage
+            .from(
+              "business-logos"
+            )
+            .getPublicUrl(
+              filePath
+            );
 
         finalLogoUrl =
           publicUrlData.publicUrl;
 
-        setLogoUrl(finalLogoUrl);
-        setLogoPreview(finalLogoUrl);
+        setLogoUrl(
+          finalLogoUrl
+        );
+
+        setLogoPreview(
+          finalLogoUrl
+        );
+
         setLogoFile(null);
+
         setRemoveLogo(false);
       }
 
       /* =========================
-         UPDATE BUSINESS PROFILE
+         CREATE OR UPDATE PROFILE
+         
+         THIS IS THE IMPORTANT FIX.
+         
+         UPSERT:
+         - Existing profile → UPDATE
+         - New profile → INSERT
       ========================= */
 
       const {
+        data: savedProfile,
         error: profileError,
-      } = await supabase
-        .from("business_profiles")
-        .update({
-          business_name: businessName,
-          address,
-          social_handle: socialHandle,
-          logo_url: finalLogoUrl,
-        })
-        .eq("user_id", user.id);
+      } =
+        await supabase
+          .from("business_profiles")
+          .upsert(
+            {
+              user_id: user.id,
+
+              business_name:
+                businessName.trim(),
+
+              address:
+                address.trim(),
+
+              social_handle:
+                socialHandle.trim() ||
+                null,
+
+              logo_url:
+                finalLogoUrl,
+            },
+            {
+              onConflict:
+                "user_id",
+            }
+          )
+          .select("*")
+          .single();
 
       if (profileError) {
         console.error(
-          "Profile update error:",
+          "Profile save error:",
           profileError
         );
 
-        alert(profileError.message);
+        alert(
+          profileError.message
+        );
+
         return;
       }
 
@@ -262,25 +418,23 @@ export default function AccountPage() {
          UPDATE LOCAL STATE
       ========================= */
 
-      setLogoUrl(finalLogoUrl);
-      setLogoPreview(finalLogoUrl);
-
-      if (removeLogo) {
-        setLogoFile(null);
-        setRemoveLogo(false);
+      if (savedProfile) {
+        setProfile(
+          savedProfile
+        );
       }
 
-      setProfile((current) =>
-        current
-          ? {
-              ...current,
-              business_name: businessName,
-              address,
-              social_handle: socialHandle,
-              logo_url: finalLogoUrl,
-            }
-          : current
+      setLogoUrl(
+        finalLogoUrl
       );
+
+      setLogoPreview(
+        finalLogoUrl
+      );
+
+      setLogoFile(null);
+
+      setRemoveLogo(false);
 
       alert(
         "Account information updated successfully."
@@ -322,9 +476,7 @@ export default function AccountPage() {
   return (
     <main className="min-h-screen bg-gray-50">
 
-      {/* =========================
-          HEADER
-      ========================= */}
+      {/* HEADER */}
 
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
@@ -333,7 +485,8 @@ export default function AccountPage() {
             href="/"
             className="text-2xl font-bold text-gray-900"
           >
-            Bizz<span className="text-blue-600">
+            Bizz
+            <span className="text-blue-600">
               Bill
             </span>
           </Link>
@@ -348,13 +501,11 @@ export default function AccountPage() {
         </div>
       </header>
 
-      {/* =========================
-          MAIN
-      ========================= */}
+      {/* MAIN */}
 
       <section className="mx-auto max-w-3xl px-6 py-10">
 
-        {/* PAGE HEADING */}
+        {/* HEADING */}
 
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">
@@ -390,6 +541,7 @@ export default function AccountPage() {
               {/* NAME */}
 
               <div>
+
                 <label
                   htmlFor="name"
                   className="mb-2 block text-sm font-bold text-gray-800"
@@ -402,16 +554,20 @@ export default function AccountPage() {
                   type="text"
                   value={name}
                   onChange={(e) =>
-                    setName(e.target.value)
+                    setName(
+                      e.target.value
+                    )
                   }
                   placeholder="Enter your full name"
                   className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
+
               </div>
 
               {/* EMAIL */}
 
               <div>
+
                 <label
                   htmlFor="email"
                   className="mb-2 block text-sm font-bold text-gray-800"
@@ -422,7 +578,9 @@ export default function AccountPage() {
                 <input
                   id="email"
                   type="email"
-                  value={user?.email || ""}
+                  value={
+                    user?.email || ""
+                  }
                   disabled
                   className="w-full cursor-not-allowed rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 font-medium text-gray-500"
                 />
@@ -430,9 +588,11 @@ export default function AccountPage() {
                 <p className="mt-2 text-xs text-gray-500">
                   Your email address cannot be changed here.
                 </p>
+
               </div>
 
             </div>
+
           </div>
 
           {/* =========================
@@ -463,11 +623,12 @@ export default function AccountPage() {
 
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
-                  {/* LOGO PREVIEW */}
+                  {/* PREVIEW */}
 
                   <div className="flex flex-col items-center justify-center">
 
                     {logoPreview ? (
+
                       <div className="relative flex h-36 w-36 items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
 
                         <img
@@ -477,10 +638,13 @@ export default function AccountPage() {
                         />
 
                       </div>
+
                     ) : (
+
                       <div className="flex h-36 w-36 items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-white text-center">
 
                         <div>
+
                           <div className="text-4xl">
                             🏢
                           </div>
@@ -488,20 +652,26 @@ export default function AccountPage() {
                           <p className="mt-2 text-xs font-bold text-gray-500">
                             No logo
                           </p>
+
                         </div>
 
                       </div>
+
                     )}
 
-                    {/* UPLOAD */}
+                    {/* FILE INPUT */}
 
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
-                      onChange={handleLogoChange}
+                      onChange={
+                        handleLogoChange
+                      }
                       className="hidden"
                     />
+
+                    {/* BUTTONS */}
 
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row">
 
@@ -520,7 +690,9 @@ export default function AccountPage() {
                       {logoPreview && (
                         <button
                           type="button"
-                          onClick={handleRemoveLogo}
+                          onClick={
+                            handleRemoveLogo
+                          }
                           className="rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-extrabold text-red-600 transition hover:bg-red-50"
                         >
                           Remove Logo
@@ -540,6 +712,7 @@ export default function AccountPage() {
                   </div>
 
                 </div>
+
               </div>
 
               {/* =========================
@@ -587,7 +760,9 @@ export default function AccountPage() {
                   id="address"
                   value={address}
                   onChange={(e) =>
-                    setAddress(e.target.value)
+                    setAddress(
+                      e.target.value
+                    )
                   }
                   placeholder="Enter your business address"
                   rows={4}
@@ -625,6 +800,7 @@ export default function AccountPage() {
               </div>
 
             </div>
+
           </div>
 
           {/* =========================
@@ -642,7 +818,9 @@ export default function AccountPage() {
           </button>
 
         </form>
+
       </section>
+
     </main>
   );
 }
