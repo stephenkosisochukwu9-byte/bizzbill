@@ -1,20 +1,26 @@
 "use client";
 
+
 import {
   Suspense,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { toPng } from "html-to-image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+
 
 type PaymentStatus =
   | "Unpaid"
   | "Paid"
   | "Partially Paid";
+
 
 type Item = {
   name: string;
@@ -22,10 +28,12 @@ type Item = {
   unitPrice: number;
 };
 
+
 type BusinessProfile = {
   business_name: string | null;
   address: string | null;
 };
+
 
 type SavedDocument = {
   id: string;
@@ -43,51 +51,79 @@ type SavedDocument = {
   business_address: string | null;
 };
 
+
 function InvoicePageContent() {
   const supabase = createClient();
 
+
   const searchParams = useSearchParams();
+
+
+  const router = useRouter();
+
 
   const invoiceRef =
     useRef<HTMLDivElement>(null);
 
+
   const [generated, setGenerated] =
     useState(false);
 
+
   const [loadingDocument, setLoadingDocument] =
     useState(false);
+
+
+  /* =========================
+     AUTHENTICATION
+  ========================= */
+
+
+  const [authLoading, setAuthLoading] =
+    useState(true);
+
 
   /* =========================
      BUSINESS PROFILE
   ========================= */
 
+
   const [businessProfile, setBusinessProfile] =
     useState<BusinessProfile | null>(null);
 
+
   const [profileLoading, setProfileLoading] =
     useState(true);
+
 
   /* =========================
      INVOICE DETAILS
   ========================= */
 
+
   const [customerName, setCustomerName] =
     useState("");
+
 
   const [customerPhone, setCustomerPhone] =
     useState("");
 
+
   const [invoiceNumber, setInvoiceNumber] =
     useState("");
+
 
   const [invoiceDate, setInvoiceDate] =
     useState("");
 
+
   const [paymentStatus, setPaymentStatus] =
     useState<PaymentStatus>("Unpaid");
 
+
   const [amountPaid, setAmountPaid] =
     useState<number>(0);
+
 
   const [items, setItems] = useState<Item[]>([
     {
@@ -97,19 +133,108 @@ function InvoicePageContent() {
     },
   ]);
 
+
+  /* =========================
+     AUTHENTICATION GUARD
+  ========================= */
+
+
+  useEffect(() => {
+    const checkAuthentication = async () => {
+      try {
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
+
+
+        if (error) {
+          console.error(
+            "Authentication check error:",
+            error
+          );
+
+
+          const currentPath =
+            window.location.pathname +
+            window.location.search;
+
+
+          router.replace(
+            `/login?redirect=${encodeURIComponent(
+              currentPath
+            )}`
+          );
+
+
+          return;
+        }
+
+
+        if (!user) {
+          const currentPath =
+            window.location.pathname +
+            window.location.search;
+
+
+          router.replace(
+            `/login?redirect=${encodeURIComponent(
+              currentPath
+            )}`
+          );
+
+
+          return;
+        }
+
+
+        setAuthLoading(false);
+      } catch (error) {
+        console.error(
+          "Authentication check failed:",
+          error
+        );
+
+
+        const currentPath =
+          window.location.pathname +
+          window.location.search;
+
+
+        router.replace(
+          `/login?redirect=${encodeURIComponent(
+            currentPath
+          )}`
+        );
+      }
+    };
+
+
+    checkAuthentication();
+  }, [router, supabase]);
+
+
   /* =========================
      GET BUSINESS PROFILE
   ========================= */
 
+
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+
     const getBusinessProfile = async () => {
       try {
         setProfileLoading(true);
+
 
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+
 
         if (userError) {
           console.error(
@@ -119,21 +244,24 @@ function InvoicePageContent() {
           return;
         }
 
+
         if (!user) {
-          console.error(
-            "No logged-in user found."
-          );
           return;
         }
 
-        const { data, error } = await supabase
-          .from("business_profiles")
-          .select("business_name, address")
-          .eq("user_id", user.id)
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(1);
+
+        const { data, error } =
+          await supabase
+            .from("business_profiles")
+            .select(
+              "business_name, address"
+            )
+            .eq("user_id", user.id)
+            .order("created_at", {
+              ascending: false,
+            })
+            .limit(1);
+
 
         if (error) {
           console.error(
@@ -143,7 +271,11 @@ function InvoicePageContent() {
           return;
         }
 
-        if (data && data.length > 0) {
+
+        if (
+          data &&
+          data.length > 0
+        ) {
           setBusinessProfile(data[0]);
         }
       } catch (error) {
@@ -156,29 +288,41 @@ function InvoicePageContent() {
       }
     };
 
+
     getBusinessProfile();
-  }, [supabase]);
+  }, [authLoading, supabase]);
+
 
   /* =========================
      LOAD SAVED INVOICE
   ========================= */
 
+
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+
     const documentId =
       searchParams.get("id");
+
 
     if (!documentId) {
       return;
     }
 
+
     const loadInvoice = async () => {
       try {
         setLoadingDocument(true);
+
 
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+
 
         if (userError) {
           console.error(
@@ -188,12 +332,11 @@ function InvoicePageContent() {
           return;
         }
 
+
         if (!user) {
-          alert(
-            "You must be logged in to view this invoice."
-          );
           return;
         }
+
 
         const { data, error } =
           await supabase
@@ -201,8 +344,12 @@ function InvoicePageContent() {
             .select("*")
             .eq("id", documentId)
             .eq("user_id", user.id)
-            .eq("document_type", "invoice")
+            .eq(
+              "document_type",
+              "invoice"
+            )
             .single();
+
 
         if (error) {
           console.error(
@@ -210,39 +357,51 @@ function InvoicePageContent() {
             error
           );
 
+
           alert(
             "Unable to load this invoice."
           );
 
+
           return;
         }
+
 
         if (!data) {
-          alert("Invoice not found.");
+          alert(
+            "Invoice not found."
+          );
+
+
           return;
         }
 
-        const savedItems = Array.isArray(
-          data.items
-        )
-          ? data.items
-          : [];
+
+        const savedItems =
+          Array.isArray(data.items)
+            ? data.items
+            : [];
+
 
         setCustomerName(
           data.customer_name || ""
         );
 
+
         setCustomerPhone(
           data.customer_phone || ""
         );
+
 
         setInvoiceNumber(
           data.document_number || ""
         );
 
+
         setInvoiceDate(
           data.document_date || ""
         );
+
 
         setItems(
           savedItems.length > 0
@@ -256,14 +415,19 @@ function InvoicePageContent() {
               ]
         );
 
+
         setPaymentStatus(
           data.payment_status ||
             "Unpaid"
         );
 
+
         setAmountPaid(
-          Number(data.amount_paid || 0)
+          Number(
+            data.amount_paid || 0
+          )
         );
+
 
         if (
           data.business_name ||
@@ -271,11 +435,14 @@ function InvoicePageContent() {
         ) {
           setBusinessProfile({
             business_name:
-              data.business_name || null,
+              data.business_name ||
+              null,
             address:
-              data.business_address || null,
+              data.business_address ||
+              null,
           });
         }
+
 
         setGenerated(true);
       } catch (error) {
@@ -283,6 +450,7 @@ function InvoicePageContent() {
           "Load invoice error:",
           error
         );
+
 
         alert(
           "Something went wrong while loading the invoice."
@@ -292,12 +460,19 @@ function InvoicePageContent() {
       }
     };
 
+
     loadInvoice();
-  }, [searchParams, supabase]);
+  }, [
+    authLoading,
+    searchParams,
+    supabase,
+  ]);
+
 
   /* =========================
      ITEM FUNCTIONS
   ========================= */
+
 
   const updateItem = (
     index: number,
@@ -316,6 +491,7 @@ function InvoicePageContent() {
     );
   };
 
+
   const addItem = () => {
     setItems((current) => [
       ...current,
@@ -327,12 +503,14 @@ function InvoicePageContent() {
     ]);
   };
 
+
   const removeItem = (
     index: number
   ) => {
     if (items.length === 1) {
       return;
     }
+
 
     setItems((current) =>
       current.filter(
@@ -341,9 +519,11 @@ function InvoicePageContent() {
     );
   };
 
+
   /* =========================
      CALCULATIONS
   ========================= */
+
 
   const itemTotal = (
     item: Item
@@ -354,6 +534,7 @@ function InvoicePageContent() {
     );
   };
 
+
   const grandTotal =
     items.reduce(
       (total, item) =>
@@ -361,20 +542,25 @@ function InvoicePageContent() {
       0
     );
 
+
   const balanceDue =
     paymentStatus ===
     "Partially Paid"
       ? Math.max(
-          grandTotal - amountPaid,
+          grandTotal -
+            amountPaid,
           0
         )
-      : paymentStatus === "Unpaid"
+      : paymentStatus ===
+        "Unpaid"
       ? grandTotal
       : 0;
+
 
   /* =========================
      GENERATE INVOICE
   ========================= */
+
 
   const generateInvoice =
     async () => {
@@ -387,6 +573,7 @@ function InvoicePageContent() {
         return;
       }
 
+
       if (!customerName.trim()) {
         alert(
           "Please enter customer name."
@@ -394,12 +581,14 @@ function InvoicePageContent() {
         return;
       }
 
+
       if (!invoiceDate) {
         alert(
           "Please select invoice date."
         );
         return;
       }
+
 
       if (
         items.some(
@@ -413,11 +602,13 @@ function InvoicePageContent() {
         return;
       }
 
+
       if (
         items.some(
           (item) =>
             item.quantity === "" ||
-            Number(item.quantity) <= 0
+            Number(item.quantity) <=
+              0
         )
       ) {
         alert(
@@ -426,11 +617,13 @@ function InvoicePageContent() {
         return;
       }
 
+
       try {
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+
 
         if (userError) {
           console.error(
@@ -438,24 +631,37 @@ function InvoicePageContent() {
             userError
           );
 
+
           alert(
             "Unable to verify your account. Please try again."
           );
 
+
           return;
         }
+
 
         if (!user) {
-          alert(
-            "You must be logged in to generate an invoice."
+          const currentPath =
+            window.location.pathname +
+            window.location.search;
+
+
+          router.replace(
+            `/login?redirect=${encodeURIComponent(
+              currentPath
+            )}`
           );
+
 
           return;
         }
+
 
         /* =========================
            AUTOMATIC INVOICE NUMBER
         ========================= */
+
 
         const {
           data: generatedNumber,
@@ -464,37 +670,46 @@ function InvoicePageContent() {
           "get_next_invoice_number"
         );
 
+
         if (numberError) {
           console.error(
             "Invoice number generation error:",
             numberError
           );
 
+
           alert(
             "Unable to generate invoice number. Please try again."
           );
 
+
           return;
         }
+
 
         if (!generatedNumber) {
           alert(
             "Unable to generate invoice number. Please try again."
           );
 
+
           return;
         }
 
+
         const newInvoiceNumber =
           String(generatedNumber);
+
 
         setInvoiceNumber(
           newInvoiceNumber
         );
 
+
         /* =========================
            PAYMENT CALCULATIONS
         ========================= */
+
 
         const savedAmountPaid =
           paymentStatus === "Paid"
@@ -503,6 +718,7 @@ function InvoicePageContent() {
               "Partially Paid"
             ? amountPaid
             : 0;
+
 
         const savedBalanceDue =
           paymentStatus ===
@@ -517,9 +733,11 @@ function InvoicePageContent() {
               )
             : 0;
 
+
         /* =========================
            SAVE INVOICE
         ========================= */
+
 
         const {
           error: insertError,
@@ -528,44 +746,59 @@ function InvoicePageContent() {
           .insert({
             user_id: user.id,
 
+
             document_type:
               "invoice",
+
 
             document_number:
               newInvoiceNumber,
 
+
             customer_name:
               customerName,
 
+
             customer_phone:
-              customerPhone || null,
+              customerPhone ||
+              null,
+
 
             document_date:
               invoiceDate,
 
+
             items: items,
+
 
             total_amount:
               grandTotal,
 
+
             amount_paid:
               savedAmountPaid,
+
 
             balance_due:
               savedBalanceDue,
 
+
             payment_status:
               paymentStatus,
+
 
             payment_method:
               null,
 
+
             business_name:
               businessProfile.business_name,
+
 
             business_address:
               businessProfile.address,
           });
+
 
         if (insertError) {
           console.error(
@@ -573,14 +806,18 @@ function InvoicePageContent() {
             insertError
           );
 
+
           alert(
             "Unable to save invoice. Please try again."
           );
 
+
           return;
         }
 
+
         setGenerated(true);
+
 
         setTimeout(() => {
           window.scrollTo({
@@ -594,15 +831,18 @@ function InvoicePageContent() {
           error
         );
 
+
         alert(
           "Something went wrong while generating the invoice."
         );
       }
     };
 
+
   /* =========================
      SAVE AS PNG
   ========================= */
+
 
   const saveAsImage =
     async () => {
@@ -610,32 +850,41 @@ function InvoicePageContent() {
         return;
       }
 
+
       const element =
         invoiceRef.current;
+
 
       const originalWidth =
         element.style.width;
 
+
       const originalMaxWidth =
         element.style.maxWidth;
 
+
       const originalMinWidth =
         element.style.minWidth;
+
 
       try {
         element.style.width =
           "720px";
 
+
         element.style.maxWidth =
           "720px";
 
+
         element.style.minWidth =
           "720px";
+
 
         await new Promise(
           (resolve) =>
             setTimeout(resolve, 100)
         );
+
 
         const dataUrl =
           await toPng(element, {
@@ -649,21 +898,26 @@ function InvoicePageContent() {
             cacheBust: true,
           });
 
+
         const link =
           document.createElement(
             "a"
           );
+
 
         link.download = `Invoice-${
           invoiceNumber ||
           "invoice"
         }.png`;
 
+
         link.href = dataUrl;
+
 
         link.click();
       } catch (error) {
         console.error(error);
+
 
         alert(
           "Unable to save the invoice as an image. Please try again."
@@ -672,23 +926,49 @@ function InvoicePageContent() {
         element.style.width =
           originalWidth;
 
+
         element.style.maxWidth =
           originalMaxWidth;
+
 
         element.style.minWidth =
           originalMinWidth;
       }
     };
 
+
+  /* =========================
+     AUTH LOADING
+  ========================= */
+
+
+  if (authLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+
+
+          <p className="mt-4 text-sm font-semibold text-gray-600">
+            Checking your account...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+
   /* =========================
      LOADING SAVED DOCUMENT
   ========================= */
+
 
   if (loadingDocument) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+
 
           <p className="mt-4 text-sm font-semibold text-gray-600">
             Loading invoice...
@@ -698,9 +978,11 @@ function InvoicePageContent() {
     );
   }
 
+
   /* =========================
      GENERATED INVOICE
   ========================= */
+
 
   if (generated) {
     return (
@@ -713,14 +995,17 @@ function InvoicePageContent() {
               padding: 0 !important;
             }
 
+
             @page {
               size: A4;
               margin: 0;
             }
 
+
             .no-print {
               display: none !important;
             }
+
 
             [data-print-invoice] {
               width: 100% !important;
@@ -732,11 +1017,15 @@ function InvoicePageContent() {
           }
         `}</style>
 
+
         <main className="min-h-screen bg-gray-100 px-3 py-5 sm:px-6 sm:py-10">
+
 
           {/* TOP NAVIGATION */}
 
+
           <div className="no-print mx-auto mb-5 flex w-full max-w-4xl items-center justify-between gap-3">
+
 
             <Link
               href="/"
@@ -744,6 +1033,7 @@ function InvoicePageContent() {
             >
               ← Home
             </Link>
+
 
             <button
               type="button"
@@ -755,9 +1045,12 @@ function InvoicePageContent() {
               Edit Invoice
             </button>
 
+
           </div>
 
+
           {/* INVOICE */}
+
 
           <div
             ref={invoiceRef}
@@ -765,18 +1058,24 @@ function InvoicePageContent() {
             className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
           >
 
+
             {/* HEADER */}
+
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
+
               <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
 
+
                 <div className="min-w-0">
+
 
                   <h1 className="break-words text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
                     {businessProfile?.business_name ||
                       "BizzBill"}
                   </h1>
+
 
                   {businessProfile?.address && (
                     <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-700 sm:text-base">
@@ -786,19 +1085,25 @@ function InvoicePageContent() {
                     </p>
                   )}
 
+
                   <p className="mt-2 text-sm font-semibold text-gray-600 sm:text-base">
                     Professional Invoice
                   </p>
 
+
                 </div>
 
+
                 <div className="sm:text-right">
+
 
                   <h2 className="text-3xl font-extrabold text-gray-950 sm:text-4xl">
                     INVOICE
                   </h2>
 
+
                   <div className="mt-3 space-y-1.5 text-sm text-gray-700 sm:text-base">
+
 
                     <p>
                       Invoice No:{" "}
@@ -809,6 +1114,7 @@ function InvoicePageContent() {
                       </span>
                     </p>
 
+
                     <p>
                       Date:{" "}
                       <span className="font-extrabold text-gray-950">
@@ -818,27 +1124,37 @@ function InvoicePageContent() {
                       </span>
                     </p>
 
+
                   </div>
+
 
                 </div>
 
+
               </div>
+
 
             </div>
 
+
             {/* CUSTOMER + PAYMENT */}
+
 
             <div className="grid grid-cols-1 gap-7 border-b border-gray-200 px-5 py-7 sm:grid-cols-2 sm:px-10 sm:py-9">
 
+
               <div>
+
 
                 <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
                   Bill To
                 </p>
 
+
                 <p className="mt-2 break-words text-xl font-extrabold text-gray-950 sm:text-2xl">
                   {customerName}
                 </p>
+
 
                 {customerPhone && (
                   <p className="mt-1 break-all text-sm font-semibold text-gray-800 sm:text-base">
@@ -848,13 +1164,17 @@ function InvoicePageContent() {
                   </p>
                 )}
 
+
               </div>
 
+
               <div className="sm:text-right">
+
 
                 <p className="text-xs font-extrabold uppercase tracking-wide text-gray-600 sm:text-sm">
                   Payment Status
                 </p>
+
 
                 <p
                   className={`mt-2 text-xl font-extrabold sm:text-2xl ${
@@ -872,43 +1192,59 @@ function InvoicePageContent() {
                   }
                 </p>
 
+
               </div>
+
 
             </div>
 
+
             {/* ITEMS */}
+
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
+
               <div className="w-full overflow-hidden">
+
 
                 <table className="w-full table-fixed border-collapse">
 
+
                   <thead>
 
+
                     <tr className="border-b-2 border-gray-300">
+
 
                       <th className="w-[38%] pb-4 pr-2 text-left text-xs font-extrabold text-gray-800 sm:text-sm">
                         Item
                       </th>
 
+
                       <th className="w-[13%] pb-4 text-center text-xs font-extrabold text-gray-800 sm:text-sm">
                         Qty
                       </th>
+
 
                       <th className="w-[25%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
                         Unit Price
                       </th>
 
+
                       <th className="w-[24%] pb-4 text-right text-xs font-extrabold text-gray-800 sm:text-sm">
                         Amount
                       </th>
 
+
                     </tr>
+
 
                   </thead>
 
+
                   <tbody>
+
 
                     {items.map(
                       (
@@ -922,17 +1258,20 @@ function InvoicePageContent() {
                           className="border-b border-gray-100"
                         >
 
+
                           <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
                             {
                               item.name
                             }
                           </td>
 
+
                           <td className="py-5 text-center text-sm font-bold text-gray-950 sm:text-base">
                             {
                               item.quantity
                             }
                           </td>
+
 
                           <td className="whitespace-nowrap py-5 text-right text-sm font-semibold text-gray-950 sm:text-base">
                             ₦
@@ -943,6 +1282,7 @@ function InvoicePageContent() {
                             )}
                           </td>
 
+
                           <td className="whitespace-nowrap py-5 text-right text-sm font-extrabold text-gray-950 sm:text-base">
                             ₦
                             {itemTotal(
@@ -952,29 +1292,40 @@ function InvoicePageContent() {
                             )}
                           </td>
 
+
                         </tr>
                       )
                     )}
 
+
                   </tbody>
+
 
                 </table>
 
+
               </div>
+
 
             </div>
 
+
             {/* TOTALS */}
+
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
+
               <div className="ml-auto w-full max-w-md space-y-5">
 
+
                 <div className="flex items-center justify-between gap-5">
+
 
                   <span className="text-base font-bold text-gray-800 sm:text-lg">
                     Grand Total
                   </span>
+
 
                   <span className="whitespace-nowrap text-lg font-extrabold text-gray-950 sm:text-xl">
                     ₦
@@ -983,16 +1334,20 @@ function InvoicePageContent() {
                     )}
                   </span>
 
+
                 </div>
+
 
                 {paymentStatus ===
                   "Partially Paid" && (
                   <>
                     <div className="flex items-center justify-between gap-5">
 
+
                       <span className="text-base font-bold text-gray-800 sm:text-lg">
                         Amount Paid
                       </span>
+
 
                       <span className="whitespace-nowrap text-lg font-extrabold text-gray-950 sm:text-xl">
                         ₦
@@ -1001,13 +1356,17 @@ function InvoicePageContent() {
                         )}
                       </span>
 
+
                     </div>
 
+
                     <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5">
+
 
                       <span className="text-base font-extrabold text-gray-800 sm:text-lg">
                         Balance Due
                       </span>
+
 
                       <span className="whitespace-nowrap text-lg font-extrabold text-red-600 sm:text-xl">
                         ₦
@@ -1016,17 +1375,21 @@ function InvoicePageContent() {
                         )}
                       </span>
 
+
                     </div>
                   </>
                 )}
+
 
                 {paymentStatus ===
                   "Unpaid" && (
                   <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5">
 
+
                     <span className="text-base font-extrabold text-gray-800 sm:text-lg">
                       Balance Due
                     </span>
+
 
                     <span className="whitespace-nowrap text-lg font-extrabold text-red-600 sm:text-xl">
                       ₦
@@ -1035,32 +1398,44 @@ function InvoicePageContent() {
                       )}
                     </span>
 
+
                   </div>
                 )}
 
+
               </div>
+
 
             </div>
 
+
             {/* FOOTER */}
 
+
             <div className="px-5 py-7 text-center sm:px-10 sm:py-9">
+
 
               <p className="text-base font-extrabold text-gray-900 sm:text-lg">
                 Thank you for your patronage.
               </p>
 
+
               <p className="mt-1 text-sm font-semibold text-gray-600">
                 Generated with BizzBill
               </p>
 
+
             </div>
+
 
           </div>
 
+
           {/* ACTION BUTTONS */}
 
+
           <div className="no-print mx-auto mt-5 grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2">
+
 
             <button
               type="button"
@@ -1072,6 +1447,7 @@ function InvoicePageContent() {
               🖼 Save Invoice as PNG
             </button>
 
+
             <button
               type="button"
               onClick={() =>
@@ -1082,25 +1458,33 @@ function InvoicePageContent() {
               🖨 Print Invoice
             </button>
 
+
           </div>
+
 
         </main>
       </>
     );
   }
 
+
   /* =========================
      INVOICE FORM
   ========================= */
 
+
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
 
+
       <div className="mx-auto w-full max-w-5xl">
+
 
         {/* HEADER */}
 
+
         <div className="mb-6 flex items-center justify-between gap-3">
+
 
           <Link
             href="/"
@@ -1109,23 +1493,31 @@ function InvoicePageContent() {
             ← Home
           </Link>
 
+
           <h1 className="text-xl font-extrabold text-gray-950 sm:text-2xl">
             Create Invoice
           </h1>
 
+
         </div>
+
 
         {/* FORM CARD */}
 
+
         <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
+
 
           {/* BUSINESS PROFILE */}
 
+
           <div className="mb-7 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+
 
             <p className="text-xs font-extrabold uppercase tracking-wide text-blue-700">
               Invoice From
             </p>
+
 
             {profileLoading ? (
               <p className="mt-2 text-sm font-semibold text-gray-600">
@@ -1134,12 +1526,14 @@ function InvoicePageContent() {
             ) : businessProfile ? (
               <div className="mt-2">
 
+
                 <p className="text-xl font-extrabold text-gray-950">
                   {
                     businessProfile.business_name ||
                     "Business name not set"
                   }
                 </p>
+
 
                 {businessProfile.address && (
                   <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-700">
@@ -1149,40 +1543,52 @@ function InvoicePageContent() {
                   </p>
                 )}
 
+
                 <p className="mt-3 text-xs font-semibold text-blue-700">
                   This information will automatically appear on your invoice.
                 </p>
+
 
               </div>
             ) : (
               <div className="mt-2">
 
+
                 <p className="text-sm font-bold text-red-600">
                   No business profile found.
                 </p>
+
 
                 <p className="mt-1 text-sm font-medium text-gray-600">
                   Please complete your business profile before creating invoices.
                 </p>
 
+
               </div>
             )}
 
+
           </div>
+
 
           <h2 className="mb-6 text-2xl font-extrabold text-gray-950">
             Invoice Details
           </h2>
 
+
           {/* CUSTOMER */}
+
 
           <div className="grid gap-5 sm:grid-cols-2">
 
+
             <div>
+
 
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Customer name
               </label>
+
 
               <input
                 type="text"
@@ -1198,13 +1604,17 @@ function InvoicePageContent() {
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
 
+
             </div>
 
+
             <div>
+
 
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Customer phone
               </label>
+
 
               <input
                 type="tel"
@@ -1220,13 +1630,17 @@ function InvoicePageContent() {
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
 
+
             </div>
 
+
             <div>
+
 
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Invoice date
               </label>
+
 
               <input
                 type="date"
@@ -1241,19 +1655,26 @@ function InvoicePageContent() {
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
 
+
             </div>
+
 
           </div>
 
+
           {/* ITEMS */}
+
 
           <div className="mt-8">
 
+
             <div className="mb-4 flex items-center justify-between gap-3">
+
 
               <h2 className="text-2xl font-extrabold text-gray-950">
                 Items
               </h2>
+
 
               <button
                 type="button"
@@ -1265,9 +1686,12 @@ function InvoicePageContent() {
                 + Add Item
               </button>
 
+
             </div>
 
+
             <div className="space-y-4">
+
 
               {items.map(
                 (
@@ -1281,13 +1705,17 @@ function InvoicePageContent() {
                     className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
                   >
 
+
                     <div className="grid gap-4 sm:grid-cols-3">
 
+
                       <div>
+
 
                         <label className="mb-2 block text-sm font-extrabold text-gray-800">
                           Item
                         </label>
+
 
                         <input
                           type="text"
@@ -1306,13 +1734,17 @@ function InvoicePageContent() {
                           className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
                         />
 
+
                       </div>
 
+
                       <div>
+
 
                         <label className="mb-2 block text-sm font-extrabold text-gray-800">
                           Quantity
                         </label>
+
 
                         <input
                           type="number"
@@ -1322,9 +1754,11 @@ function InvoicePageContent() {
                           }
                           onChange={(e) => {
 
+
                             const value =
                               e.target
                                 .value;
+
 
                             updateItem(
                               index,
@@ -1337,18 +1771,23 @@ function InvoicePageContent() {
                                   )
                             );
 
+
                           }}
                           placeholder="Quantity"
                           className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
                         />
 
+
                       </div>
 
+
                       <div>
+
 
                         <label className="mb-2 block text-sm font-extrabold text-gray-800">
                           Unit price
                         </label>
+
 
                         <input
                           type="number"
@@ -1374,11 +1813,15 @@ function InvoicePageContent() {
                           className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
                         />
 
+
                       </div>
+
 
                     </div>
 
+
                     <div className="mt-4 flex items-center justify-between gap-4">
+
 
                       <p className="text-sm font-extrabold text-gray-900 sm:text-base">
                         Item total: ₦
@@ -1388,6 +1831,7 @@ function InvoicePageContent() {
                           "en-NG"
                         )}
                       </p>
+
 
                       {items.length >
                         1 && (
@@ -1404,25 +1848,34 @@ function InvoicePageContent() {
                         </button>
                       )}
 
+
                     </div>
+
 
                   </div>
                 )
               )}
 
+
             </div>
+
 
           </div>
 
+
           {/* GRAND TOTAL */}
+
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
+
             <div className="flex items-center justify-between gap-5">
+
 
               <span className="text-base font-extrabold text-gray-900">
                 Grand Total
               </span>
+
 
               <span className="whitespace-nowrap text-xl font-extrabold text-gray-950">
                 ₦
@@ -1431,17 +1884,23 @@ function InvoicePageContent() {
                 )}
               </span>
 
+
             </div>
+
 
           </div>
 
+
           {/* PAYMENT STATUS */}
 
+
           <div className="mt-8">
+
 
             <label className="mb-2 block text-sm font-extrabold text-gray-900">
               Payment status
             </label>
+
 
             <select
               value={
@@ -1449,13 +1908,16 @@ function InvoicePageContent() {
               }
               onChange={(e) => {
 
+
                 const status =
                   e.target
                     .value as PaymentStatus;
 
+
                 setPaymentStatus(
                   status
                 );
+
 
                 if (
                   status !==
@@ -1466,35 +1928,45 @@ function InvoicePageContent() {
                   );
                 }
 
+
               }}
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
+
 
               <option value="Unpaid">
                 Unpaid
               </option>
 
+
               <option value="Paid">
                 Paid
               </option>
+
 
               <option value="Partially Paid">
                 Partially Paid
               </option>
 
+
             </select>
+
 
           </div>
 
+
           {/* PARTIAL PAYMENT */}
+
 
           {paymentStatus ===
             "Partially Paid" && (
             <div className="mt-5">
 
+
               <label className="mb-2 block text-sm font-extrabold text-gray-900">
                 Amount paid
               </label>
+
 
               <input
                 type="number"
@@ -1508,11 +1980,13 @@ function InvoicePageContent() {
                 }
                 onChange={(e) => {
 
+
                   const value =
                     Number(
                       e.target
                         .value
                     );
+
 
                   setAmountPaid(
                     Math.min(
@@ -1524,16 +1998,20 @@ function InvoicePageContent() {
                     )
                   );
 
+
                 }}
                 placeholder="₦0"
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none"
               />
 
+
               <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-red-50 p-4">
+
 
                 <span className="font-extrabold text-gray-800">
                   Balance Due
                 </span>
+
 
                 <span className="whitespace-nowrap font-extrabold text-red-600">
                   ₦
@@ -1542,12 +2020,16 @@ function InvoicePageContent() {
                   )}
                 </span>
 
+
               </div>
+
 
             </div>
           )}
 
+
           {/* GENERATE */}
+
 
           <button
             type="button"
@@ -1559,21 +2041,22 @@ function InvoicePageContent() {
             Generate Invoice
           </button>
 
+
         </div>
 
+
       </div>
+
 
     </main>
   );
 }
 
+
 /* =====================================================
    SUSPENSE BOUNDARY
-   IMPORTANT:
-   useSearchParams() is inside InvoicePageContent.
-   Next.js requires the component using it to be wrapped
-   in Suspense during production build/prerendering.
 ===================================================== */
+
 
 export default function InvoicePage() {
   return (
@@ -1582,11 +2065,14 @@ export default function InvoicePage() {
         <main className="flex min-h-screen items-center justify-center bg-gray-100">
           <div className="text-center">
 
+
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+
 
             <p className="mt-4 text-sm font-semibold text-gray-600">
               Loading invoice...
             </p>
+
 
           </div>
         </main>
@@ -1596,3 +2082,4 @@ export default function InvoicePage() {
     </Suspense>
   );
 }
+

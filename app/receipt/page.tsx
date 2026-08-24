@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  useRouter,
+} from "next/navigation";
 import { toPng } from "html-to-image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -48,12 +55,36 @@ type SavedReceipt = {
 
 export default function ReceiptPage() {
   const supabase = createClient();
-  const receiptRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
-  const [generated, setGenerated] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [loadingReceipt, setLoadingReceipt] = useState(false);
-  const [savedReceiptId, setSavedReceiptId] = useState<string | null>(null);
+  const receiptRef =
+    useRef<HTMLDivElement>(null);
+
+  /* =========================
+     AUTHENTICATION
+  ========================= */
+
+  const [authChecking, setAuthChecking] =
+    useState(true);
+
+  const [authenticated, setAuthenticated] =
+    useState(false);
+
+  /* =========================
+     RECEIPT STATE
+  ========================= */
+
+  const [generated, setGenerated] =
+    useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [loadingReceipt, setLoadingReceipt] =
+    useState(false);
+
+  const [savedReceiptId, setSavedReceiptId] =
+    useState<string | null>(null);
 
   /* =========================
      BUSINESS PROFILE
@@ -84,295 +115,477 @@ export default function ReceiptPage() {
   const [amountPaid, setAmountPaid] =
     useState<number>(0);
 
-  const [items, setItems] = useState<Item[]>([
-    {
-      name: "",
-      quantity: "",
-      unitPrice: 0,
-    },
-  ]);
+  const [items, setItems] =
+    useState<Item[]>([
+      {
+        name: "",
+        quantity: "",
+        unitPrice: 0,
+      },
+    ]);
 
-  /* =========================
-     GET BUSINESS PROFILE
-  ========================= */
+  /* =====================================================
+     CHECK AUTHENTICATION FIRST
+     
+     This protects the entire receipt page.
+     
+     If the user is not logged in:
+     /receipt
+     
+     becomes:
+     /login?redirect=/receipt
+     
+     If they opened:
+     /receipt?id=123
+     
+     they are sent to:
+     /login?redirect=/receipt%3Fid%3D123
+  ===================================================== */
 
   useEffect(() => {
-    const getBusinessProfile = async () => {
+    let mounted = true;
+
+    const checkAuthentication = async () => {
       try {
-        setProfileLoading(true);
+        setAuthChecking(true);
 
         const {
           data: { user },
-          error: userError,
+          error,
         } = await supabase.auth.getUser();
 
-        if (userError) {
+        if (error) {
           console.error(
-            "User fetch error:",
-            userError
+            "Authentication check error:",
+            error
           );
+        }
+
+        if (!mounted) {
           return;
         }
 
         if (!user) {
-          console.error(
-            "No logged-in user found."
-          );
+          setAuthenticated(false);
+
+          const currentPath =
+            window.location.pathname +
+            window.location.search;
+
+          const loginUrl =
+            `/login?redirect=${encodeURIComponent(
+              currentPath
+            )}`;
+
+          router.replace(loginUrl);
+
           return;
         }
 
-        const { data, error } = await supabase
-          .from("business_profiles")
-          .select("business_name, address")
-          .eq("user_id", user.id)
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(1);
-
-        if (error) {
-          console.error(
-            "Business profile fetch error:",
-            error
-          );
-          return;
-        }
-
-        if (data && data.length > 0) {
-          setBusinessProfile(data[0]);
-        } else {
-          console.log(
-            "No business profile found."
-          );
-        }
+        setAuthenticated(true);
       } catch (error) {
         console.error(
-          "Profile fetch error:",
+          "Authentication check failed:",
           error
         );
+
+        if (!mounted) {
+          return;
+        }
+
+        const currentPath =
+          window.location.pathname +
+          window.location.search;
+
+        const loginUrl =
+          `/login?redirect=${encodeURIComponent(
+            currentPath
+          )}`;
+
+        router.replace(loginUrl);
       } finally {
-        setProfileLoading(false);
+        if (mounted) {
+          setAuthChecking(false);
+        }
       }
     };
 
-    getBusinessProfile();
-  }, [supabase]);
+    checkAuthentication();
 
-  /* =========================
+    return () => {
+      mounted = false;
+    };
+  }, [router, supabase]);
+
+  /* =====================================================
+     GET BUSINESS PROFILE
+     
+     Only runs after authentication is confirmed.
+  ===================================================== */
+
+  useEffect(() => {
+    if (
+      authChecking ||
+      !authenticated
+    ) {
+      return;
+    }
+
+    const getBusinessProfile =
+      async () => {
+        try {
+          setProfileLoading(true);
+
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+
+          if (userError) {
+            console.error(
+              "User fetch error:",
+              userError
+            );
+            return;
+          }
+
+          if (!user) {
+            return;
+          }
+
+          const {
+            data,
+            error,
+          } = await supabase
+            .from("business_profiles")
+            .select(
+              "business_name, address"
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .order(
+              "created_at",
+              {
+                ascending: false,
+              }
+            )
+            .limit(1);
+
+          if (error) {
+            console.error(
+              "Business profile fetch error:",
+              error
+            );
+            return;
+          }
+
+          if (
+            data &&
+            data.length > 0
+          ) {
+            setBusinessProfile(
+              data[0]
+            );
+          } else {
+            console.log(
+              "No business profile found."
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Profile fetch error:",
+            error
+          );
+        } finally {
+          setProfileLoading(false);
+        }
+      };
+
+    getBusinessProfile();
+  }, [
+    authChecking,
+    authenticated,
+    supabase,
+  ]);
+
+  /* =====================================================
      FETCH SAVED RECEIPT
      
      If URL is:
      /receipt?id=123
      
      fetch that exact receipt.
-  ========================= */
+     
+     Only runs after authentication is confirmed.
+  ===================================================== */
 
   useEffect(() => {
-    const fetchSavedReceipt = async () => {
-      try {
-        const params = new URLSearchParams(
-          window.location.search
-        );
+    if (
+      authChecking ||
+      !authenticated
+    ) {
+      return;
+    }
 
-        const receiptId =
-          params.get("id");
+    const fetchSavedReceipt =
+      async () => {
+        try {
+          const params =
+            new URLSearchParams(
+              window.location.search
+            );
 
-        /* No ID means normal
-           create-receipt mode. */
+          const receiptId =
+            params.get("id");
 
-        if (!receiptId) {
-          return;
-        }
+          /* No ID means normal
+             create-receipt mode. */
 
-        setLoadingReceipt(true);
+          if (!receiptId) {
+            return;
+          }
 
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          setLoadingReceipt(true);
 
-        if (userError) {
-          console.error(
-            "User fetch error:",
-            userError
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+
+          if (userError) {
+            console.error(
+              "User fetch error:",
+              userError
+            );
+            return;
+          }
+
+          if (!user) {
+            const currentPath =
+              window.location.pathname +
+              window.location.search;
+
+            router.replace(
+              `/login?redirect=${encodeURIComponent(
+                currentPath
+              )}`
+            );
+
+            return;
+          }
+
+          /* =========================
+             FETCH EXACT DOCUMENT
+          ========================= */
+
+          const {
+            data,
+            error,
+          } = await supabase
+            .from("documents")
+            .select("*")
+            .eq(
+              "id",
+              receiptId
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .eq(
+              "document_type",
+              "receipt"
+            )
+            .maybeSingle();
+
+          if (error) {
+            console.error(
+              "Receipt fetch error:",
+              error
+            );
+
+            alert(
+              "Unable to load this receipt."
+            );
+
+            return;
+          }
+
+          if (!data) {
+            alert(
+              "Receipt not found."
+            );
+
+            return;
+          }
+
+          const saved =
+            data as SavedReceipt;
+
+          /* =========================
+             LOAD SAVED DATA
+          ========================= */
+
+          setSavedReceiptId(
+            saved.id
           );
-          return;
-        }
 
-        if (!user) {
-          alert(
-            "You must be logged in to view this receipt."
+          setReceiptNumber(
+            saved.document_number ||
+              ""
           );
-          return;
-        }
 
-        /* =========================
-           FETCH EXACT DOCUMENT
-        ========================= */
+          setCustomerName(
+            saved.customer_name ||
+              ""
+          );
 
-        const { data, error } = await supabase
-          .from("documents")
-          .select("*")
-          .eq("id", receiptId)
-          .eq("user_id", user.id)
-          .eq("document_type", "receipt")
-          .maybeSingle();
+          setReceiptDate(
+            saved.document_date ||
+              ""
+          );
 
-        if (error) {
+          const savedPaymentMethod =
+            saved.payment_method;
+
+          if (
+            savedPaymentMethod ===
+              "Cash" ||
+            savedPaymentMethod ===
+              "Bank Transfer" ||
+            savedPaymentMethod ===
+              "Card" ||
+            savedPaymentMethod ===
+              "Other"
+          ) {
+            setPaymentMethod(
+              savedPaymentMethod
+            );
+          } else {
+            setPaymentMethod(
+              "Other"
+            );
+          }
+
+          setAmountPaid(
+            Number(
+              saved.amount_paid ||
+                0
+            )
+          );
+
+          /* =========================
+             LOAD ITEMS
+          ========================= */
+
+          if (
+            Array.isArray(
+              saved.items
+            ) &&
+            saved.items.length > 0
+          ) {
+            setItems(
+              saved.items.map(
+                (item) => ({
+                  name:
+                    item?.name ||
+                    "",
+                  quantity:
+                    item?.quantity ===
+                      "" ||
+                    item?.quantity ===
+                      null ||
+                    item?.quantity ===
+                      undefined
+                      ? ""
+                      : Number(
+                          item.quantity
+                        ),
+                  unitPrice:
+                    Number(
+                      item?.unitPrice ||
+                        0
+                    ),
+                })
+              )
+            );
+          } else {
+            setItems([
+              {
+                name: "",
+                quantity: "",
+                unitPrice: 0,
+              },
+            ]);
+          }
+
+          /* =========================
+             USE SAVED BUSINESS INFO
+             IF AVAILABLE
+          ========================= */
+
+          if (
+            saved.business_name ||
+            saved.business_address
+          ) {
+            setBusinessProfile({
+              business_name:
+                saved.business_name,
+              address:
+                saved.business_address,
+            });
+          }
+
+          /* =========================
+             SHOW RECEIPT
+          ========================= */
+
+          setGenerated(true);
+
+          setTimeout(() => {
+            window.scrollTo({
+              top: 0,
+              behavior: "smooth",
+            });
+          }, 100);
+        } catch (error) {
           console.error(
-            "Receipt fetch error:",
+            "Saved receipt loading error:",
             error
           );
 
           alert(
-            "Unable to load this receipt."
+            "Something went wrong while loading the receipt."
           );
-
-          return;
+        } finally {
+          setLoadingReceipt(false);
         }
-
-        if (!data) {
-          alert(
-            "Receipt not found."
-          );
-
-          return;
-        }
-
-        const saved =
-          data as SavedReceipt;
-
-        /* =========================
-           LOAD SAVED DATA
-        ========================= */
-
-        setSavedReceiptId(
-          saved.id
-        );
-
-        setReceiptNumber(
-          saved.document_number || ""
-        );
-
-        setCustomerName(
-          saved.customer_name || ""
-        );
-
-        setReceiptDate(
-          saved.document_date || ""
-        );
-
-        const savedPaymentMethod =
-          saved.payment_method;
-
-        if (
-          savedPaymentMethod === "Cash" ||
-          savedPaymentMethod ===
-            "Bank Transfer" ||
-          savedPaymentMethod === "Card" ||
-          savedPaymentMethod === "Other"
-        ) {
-          setPaymentMethod(
-            savedPaymentMethod
-          );
-        } else {
-          setPaymentMethod("Other");
-        }
-
-        setAmountPaid(
-          Number(saved.amount_paid || 0)
-        );
-
-        /* =========================
-           LOAD ITEMS
-        ========================= */
-
-        if (
-          Array.isArray(saved.items) &&
-          saved.items.length > 0
-        ) {
-          setItems(
-            saved.items.map((item) => ({
-              name:
-                item?.name || "",
-              quantity:
-                item?.quantity === "" ||
-                item?.quantity === null ||
-                item?.quantity === undefined
-                  ? ""
-                  : Number(
-                      item.quantity
-                    ),
-              unitPrice:
-                Number(
-                  item?.unitPrice || 0
-                ),
-            }))
-          );
-        } else {
-          setItems([
-            {
-              name: "",
-              quantity: "",
-              unitPrice: 0,
-            },
-          ]);
-        }
-
-        /* =========================
-           USE SAVED BUSINESS INFO
-           IF AVAILABLE
-        ========================= */
-
-        if (
-          saved.business_name ||
-          saved.business_address
-        ) {
-          setBusinessProfile({
-            business_name:
-              saved.business_name,
-            address:
-              saved.business_address,
-          });
-        }
-
-        /* =========================
-           SHOW RECEIPT
-        ========================= */
-
-        setGenerated(true);
-
-        setTimeout(() => {
-          window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-          });
-        }, 100);
-      } catch (error) {
-        console.error(
-          "Saved receipt loading error:",
-          error
-        );
-
-        alert(
-          "Something went wrong while loading the receipt."
-        );
-      } finally {
-        setLoadingReceipt(false);
-      }
-    };
+      };
 
     fetchSavedReceipt();
-  }, [supabase]);
+  }, [
+    authChecking,
+    authenticated,
+    router,
+    supabase,
+  ]);
 
   /* =========================
      ITEM TOTAL
   ========================= */
 
-  const itemTotal = (item: Item) => {
+  const itemTotal = (
+    item: Item
+  ) => {
     return (
-      Number(item.quantity || 0) *
-      Number(item.unitPrice || 0)
+      Number(
+        item.quantity || 0
+      ) *
+      Number(
+        item.unitPrice || 0
+      )
     );
   };
 
@@ -380,11 +593,13 @@ export default function ReceiptPage() {
      GRAND TOTAL
   ========================= */
 
-  const grandTotal = items.reduce(
-    (total, item) =>
-      total + itemTotal(item),
-    0
-  );
+  const grandTotal =
+    items.reduce(
+      (total, item) =>
+        total +
+        itemTotal(item),
+      0
+    );
 
   /* =========================
      PAYMENT STATUS
@@ -402,10 +617,12 @@ export default function ReceiptPage() {
      BALANCE DUE
   ========================= */
 
-  const balanceDue = Math.max(
-    grandTotal - amountPaid,
-    0
-  );
+  const balanceDue =
+    Math.max(
+      grandTotal -
+        amountPaid,
+      0
+    );
 
   /* =========================
      UPDATE ITEM
@@ -416,15 +633,18 @@ export default function ReceiptPage() {
     field: keyof Item,
     value: string | number
   ) => {
-    setItems((current) =>
-      current.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              [field]: value,
-            }
-          : item
-      )
+    setItems(
+      (current) =>
+        current.map(
+          (item, i) =>
+            i === index
+              ? {
+                  ...item,
+                  [field]:
+                    value,
+                }
+              : item
+        )
     );
   };
 
@@ -433,14 +653,16 @@ export default function ReceiptPage() {
   ========================= */
 
   const addItem = () => {
-    setItems((current) => [
-      ...current,
-      {
-        name: "",
-        quantity: "",
-        unitPrice: 0,
-      },
-    ]);
+    setItems(
+      (current) => [
+        ...current,
+        {
+          name: "",
+          quantity: "",
+          unitPrice: 0,
+        },
+      ]
+    );
   };
 
   /* =========================
@@ -450,110 +672,50 @@ export default function ReceiptPage() {
   const removeItem = (
     index: number
   ) => {
-    if (items.length === 1) {
+    if (
+      items.length === 1
+    ) {
       return;
     }
 
-    setItems((current) =>
-      current.filter(
-        (_, i) => i !== index
-      )
+    setItems(
+      (current) =>
+        current.filter(
+          (_, i) =>
+            i !== index
+        )
     );
   };
 
-  /* =========================
+  /* =====================================================
      GENERATE + SAVE RECEIPT
-  ========================= */
+  ===================================================== */
 
-  const generateReceipt = async () => {
-    if (saving) {
-      return;
-    }
-
-    /* =========================
-       BASIC VALIDATION
-    ========================= */
-
-    if (
-      !businessProfile?.business_name?.trim()
-    ) {
-      alert(
-        "Please complete your business profile first."
-      );
-      return;
-    }
-
-    if (!customerName.trim()) {
-      alert(
-        "Please enter customer name."
-      );
-      return;
-    }
-
-    if (!receiptDate) {
-      alert(
-        "Please select receipt date."
-      );
-      return;
-    }
-
-    if (
-      items.some(
-        (item) =>
-          !item.name.trim()
-      )
-    ) {
-      alert(
-        "Please enter a name for every item."
-      );
-      return;
-    }
-
-    if (
-      items.some(
-        (item) =>
-          item.quantity === "" ||
-          Number(item.quantity) <= 0
-      )
-    ) {
-      alert(
-        "Please enter a valid quantity for every item."
-      );
-      return;
-    }
-
-    if (
-      items.some(
-        (item) =>
-          Number(item.unitPrice) < 0
-      )
-    ) {
-      alert(
-        "Please enter a valid unit price for every item."
-      );
-      return;
-    }
-
-    if (grandTotal <= 0) {
-      alert(
-        "Receipt total must be greater than ₦0."
-      );
-      return;
-    }
-
-    try {
-      setSaving(true);
+  const generateReceipt =
+    async () => {
+      if (saving) {
+        return;
+      }
 
       /* =========================
-         GET CURRENT USER
+         AUTH CHECK
+         
+         Extra protection even though
+         the page itself is protected.
       ========================= */
 
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        data: {
+          user,
+        },
+        error:
+          userError,
+      } =
+        await supabase.auth.getUser();
 
-      if (userError) {
+      if (
+        userError
+      ) {
         console.error(
           "User fetch error:",
           userError
@@ -567,285 +729,453 @@ export default function ReceiptPage() {
       }
 
       if (!user) {
-        alert(
-          "You must be logged in to generate a receipt."
+        const currentPath =
+          window.location.pathname +
+          window.location.search;
+
+        router.replace(
+          `/login?redirect=${encodeURIComponent(
+            currentPath
+          )}`
         );
 
         return;
       }
 
       /* =========================
-         GENERATE RECEIPT NUMBER
-         
-         Only generate a new number
-         when creating a NEW receipt.
+         BASIC VALIDATION
       ========================= */
 
-      let finalReceiptNumber =
-        receiptNumber;
-
-      if (!finalReceiptNumber) {
-        const {
-          data: generatedNumber,
-          error: numberError,
-        } = await supabase.rpc(
-          "get_next_receipt_number"
+      if (
+        !businessProfile?.business_name?.trim()
+      ) {
+        alert(
+          "Please complete your business profile first."
         );
-
-        if (numberError) {
-          console.error(
-            "Receipt number generation error:",
-            numberError
-          );
-
-          alert(
-            "Unable to generate receipt number. Please try again."
-          );
-
-          return;
-        }
-
-        if (!generatedNumber) {
-          alert(
-            "Unable to generate receipt number. Please try again."
-          );
-
-          return;
-        }
-
-        finalReceiptNumber =
-          String(generatedNumber);
-
-        setReceiptNumber(
-          finalReceiptNumber
-        );
+        return;
       }
 
-      /* =========================
-         RECEIPT DATA
-      ========================= */
+      if (
+        !customerName.trim()
+      ) {
+        alert(
+          "Please enter customer name."
+        );
+        return;
+      }
 
-      const receiptData = {
-        user_id: user.id,
+      if (!receiptDate) {
+        alert(
+          "Please select receipt date."
+        );
+        return;
+      }
 
-        document_type: "receipt",
+      if (
+        items.some(
+          (item) =>
+            !item.name.trim()
+        )
+      ) {
+        alert(
+          "Please enter a name for every item."
+        );
+        return;
+      }
 
-        document_number:
-          finalReceiptNumber,
+      if (
+        items.some(
+          (item) =>
+            item.quantity ===
+              "" ||
+            Number(
+              item.quantity
+            ) <= 0
+        )
+      ) {
+        alert(
+          "Please enter a valid quantity for every item."
+        );
+        return;
+      }
 
-        customer_name:
-          customerName.trim(),
+      if (
+        items.some(
+          (item) =>
+            Number(
+              item.unitPrice
+            ) < 0
+        )
+      ) {
+        alert(
+          "Please enter a valid unit price for every item."
+        );
+        return;
+      }
 
-        customer_phone: null,
+      if (
+        grandTotal <= 0
+      ) {
+        alert(
+          "Receipt total must be greater than ₦0."
+        );
+        return;
+      }
 
-        document_date:
-          receiptDate,
+      try {
+        setSaving(true);
 
-        items: items,
-
-        total_amount:
-          grandTotal,
-
-        amount_paid:
-          amountPaid,
-
-        balance_due:
-          balanceDue,
-
-        payment_status:
-          paymentStatus,
-
-        payment_method:
-          paymentMethod,
-
-        business_name:
-          businessProfile.business_name,
-
-        business_address:
-          businessProfile.address,
-      };
-
-      /* =========================
-         UPDATE EXISTING RECEIPT
-         
-         This is useful if the user
-         opened an existing receipt,
-         clicked Edit Receipt,
-         changed something and then
-         generated it again.
-      ========================= */
-
-      if (savedReceiptId) {
-        const {
-          error: updateError,
-        } = await supabase
-          .from("documents")
-          .update(receiptData)
-          .eq("id", savedReceiptId)
-          .eq("user_id", user.id)
-          .eq(
-            "document_type",
-            "receipt"
-          );
-
-        if (updateError) {
-          console.error(
-            "Receipt update error:",
-            updateError
-          );
-
-          alert(
-            "Unable to update receipt. Please try again."
-          );
-
-          return;
-        }
-      } else {
         /* =========================
-           INSERT NEW RECEIPT
+           GENERATE RECEIPT NUMBER
+
+           Only generate a new number
+           when creating a NEW receipt.
         ========================= */
 
-        const {
-          data: insertedReceipt,
-          error: insertError,
-        } = await supabase
-          .from("documents")
-          .insert(
-            receiptData
-          )
-          .select("id")
-          .single();
+        let finalReceiptNumber =
+          receiptNumber;
 
-        if (insertError) {
-          console.error(
-            "Receipt save error:",
+        if (
+          !finalReceiptNumber
+        ) {
+          const {
+            data:
+              generatedNumber,
+            error:
+              numberError,
+          } =
+            await supabase.rpc(
+              "get_next_receipt_number"
+            );
+
+          if (
+            numberError
+          ) {
+            console.error(
+              "Receipt number generation error:",
+              numberError
+            );
+
+            alert(
+              "Unable to generate receipt number. Please try again."
+            );
+
+            return;
+          }
+
+          if (
+            !generatedNumber
+          ) {
+            alert(
+              "Unable to generate receipt number. Please try again."
+            );
+
+            return;
+          }
+
+          finalReceiptNumber =
+            String(
+              generatedNumber
+            );
+
+          setReceiptNumber(
+            finalReceiptNumber
+          );
+        }
+
+        /* =========================
+           RECEIPT DATA
+        ========================= */
+
+        const receiptData = {
+          user_id:
+            user.id,
+
+          document_type:
+            "receipt",
+
+          document_number:
+            finalReceiptNumber,
+
+          customer_name:
+            customerName.trim(),
+
+          customer_phone:
+            null,
+
+          document_date:
+            receiptDate,
+
+          items: items,
+
+          total_amount:
+            grandTotal,
+
+          amount_paid:
+            amountPaid,
+
+          balance_due:
+            balanceDue,
+
+          payment_status:
+            paymentStatus,
+
+          payment_method:
+            paymentMethod,
+
+          business_name:
+            businessProfile.business_name,
+
+          business_address:
+            businessProfile.address,
+        };
+
+        /* =========================
+           UPDATE EXISTING RECEIPT
+        ========================= */
+
+        if (
+          savedReceiptId
+        ) {
+          const {
+            error:
+              updateError,
+          } =
+            await supabase
+              .from(
+                "documents"
+              )
+              .update(
+                receiptData
+              )
+              .eq(
+                "id",
+                savedReceiptId
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .eq(
+                "document_type",
+                "receipt"
+              );
+
+          if (
+            updateError
+          ) {
+            console.error(
+              "Receipt update error:",
+              updateError
+            );
+
+            alert(
+              "Unable to update receipt. Please try again."
+            );
+
+            return;
+          }
+        } else {
+          /* =========================
+             INSERT NEW RECEIPT
+          ========================= */
+
+          const {
+            data:
+              insertedReceipt,
+            error:
+              insertError,
+          } =
+            await supabase
+              .from(
+                "documents"
+              )
+              .insert(
+                receiptData
+              )
+              .select(
+                "id"
+              )
+              .single();
+
+          if (
             insertError
-          );
+          ) {
+            console.error(
+              "Receipt save error:",
+              insertError
+            );
 
-          alert(
-            "Unable to save receipt. Please try again."
-          );
+            alert(
+              "Unable to save receipt. Please try again."
+            );
 
-          return;
+            return;
+          }
+
+          if (
+            insertedReceipt?.id
+          ) {
+            setSavedReceiptId(
+              insertedReceipt.id
+            );
+          }
         }
 
-        if (insertedReceipt?.id) {
-          setSavedReceiptId(
-            insertedReceipt.id
-          );
-        }
+        /* =========================
+           SHOW GENERATED RECEIPT
+        ========================= */
+
+        setGenerated(
+          true
+        );
+
+        setTimeout(() => {
+          window.scrollTo({
+            top: 0,
+            behavior:
+              "smooth",
+          });
+        }, 100);
+      } catch (error) {
+        console.error(
+          "Receipt generation error:",
+          error
+        );
+
+        alert(
+          "Something went wrong while generating the receipt."
+        );
+      } finally {
+        setSaving(false);
       }
-
-      /* =========================
-         SHOW GENERATED RECEIPT
-      ========================= */
-
-      setGenerated(true);
-
-      setTimeout(() => {
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
-      }, 100);
-    } catch (error) {
-      console.error(
-        "Receipt generation error:",
-        error
-      );
-
-      alert(
-        "Something went wrong while generating the receipt."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+    };
 
   /* =========================
      SAVE RECEIPT AS PNG
   ========================= */
 
-  const saveAsImage = async () => {
-    if (!receiptRef.current) {
-      return;
-    }
+  const saveAsImage =
+    async () => {
+      if (
+        !receiptRef.current
+      ) {
+        return;
+      }
 
-    const element =
-      receiptRef.current;
+      const element =
+        receiptRef.current;
 
-    const originalWidth =
-      element.style.width;
+      const originalWidth =
+        element.style.width;
 
-    const originalMaxWidth =
-      element.style.maxWidth;
+      const originalMaxWidth =
+        element.style.maxWidth;
 
-    const originalMinWidth =
-      element.style.minWidth;
+      const originalMinWidth =
+        element.style.minWidth;
 
-    try {
-      element.style.width =
-        "720px";
+      try {
+        element.style.width =
+          "720px";
 
-      element.style.maxWidth =
-        "720px";
+        element.style.maxWidth =
+          "720px";
 
-      element.style.minWidth =
-        "720px";
+        element.style.minWidth =
+          "720px";
 
-      await new Promise(
-        (resolve) =>
-          setTimeout(resolve, 100)
-      );
-
-      const dataUrl =
-        await toPng(element, {
-          width: 720,
-          height:
-            element.scrollHeight,
-          pixelRatio: 2,
-          quality: 1,
-          backgroundColor:
-            "#ffffff",
-          cacheBust: true,
-        });
-
-      const link =
-        document.createElement(
-          "a"
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              100
+            )
         );
 
-      link.download = `Receipt-${
-        receiptNumber ||
-        "receipt"
-      }.png`;
+        const dataUrl =
+          await toPng(
+            element,
+            {
+              width: 720,
+              height:
+                element.scrollHeight,
+              pixelRatio: 2,
+              quality: 1,
+              backgroundColor:
+                "#ffffff",
+              cacheBust: true,
+            }
+          );
 
-      link.href = dataUrl;
+        const link =
+          document.createElement(
+            "a"
+          );
 
-      link.click();
-    } catch (error) {
-      console.error(error);
+        link.download =
+          `Receipt-${
+            receiptNumber ||
+            "receipt"
+          }.png`;
 
-      alert(
-        "Unable to save the receipt as an image. Please try again."
-      );
-    } finally {
-      element.style.width =
-        originalWidth;
+        link.href =
+          dataUrl;
 
-      element.style.maxWidth =
-        originalMaxWidth;
+        link.click();
+      } catch (error) {
+        console.error(
+          error
+        );
 
-      element.style.minWidth =
-        originalMinWidth;
-    }
-  };
+        alert(
+          "Unable to save the receipt as an image. Please try again."
+        );
+      } finally {
+        element.style.width =
+          originalWidth;
+
+        element.style.maxWidth =
+          originalMaxWidth;
+
+        element.style.minWidth =
+          originalMinWidth;
+      }
+    };
+
+  /* =====================================================
+     AUTHENTICATION LOADING
+     
+     Do NOT render the receipt form before we know whether
+     the visitor is logged in.
+  ===================================================== */
+
+  if (
+    authChecking ||
+    !authenticated
+  ) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+        <div className="text-center">
+
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+
+          <p className="mt-4 text-sm font-extrabold text-gray-700">
+            Checking your account...
+          </p>
+
+        </div>
+      </main>
+    );
+  }
 
   /* =========================
      LOADING SAVED RECEIPT
   ========================= */
 
-  if (loadingReceipt) {
+  if (
+    loadingReceipt
+  ) {
     return (
       <main className="min-h-screen bg-gray-100 px-4 py-8">
         <div className="mx-auto flex min-h-[70vh] w-full max-w-4xl flex-col items-center justify-center text-center">
@@ -869,7 +1199,9 @@ export default function ReceiptPage() {
      GENERATED RECEIPT
   ================================================== */
 
-  if (generated) {
+  if (
+    generated
+  ) {
     return (
       <>
         <style jsx global>{`
@@ -915,7 +1247,9 @@ export default function ReceiptPage() {
             <button
               type="button"
               onClick={() =>
-                setGenerated(false)
+                setGenerated(
+                  false
+                )
               }
               className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-extrabold text-blue-700 shadow-sm transition hover:bg-blue-50"
             >
@@ -1060,10 +1394,15 @@ export default function ReceiptPage() {
                   <tbody>
 
                     {items.map(
-                      (item, index) => (
+                      (
+                        item,
+                        index
+                      ) => (
 
                         <tr
-                          key={index}
+                          key={
+                            index
+                          }
                           className="border-b border-gray-100"
                         >
 
@@ -1205,7 +1544,9 @@ export default function ReceiptPage() {
 
             <button
               type="button"
-              onClick={saveAsImage}
+              onClick={
+                saveAsImage
+              }
               className="rounded-xl bg-blue-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-blue-700"
             >
               🖼 Save Receipt as PNG
@@ -1338,7 +1679,9 @@ export default function ReceiptPage() {
 
               <input
                 type="text"
-                value={customerName}
+                value={
+                  customerName
+                }
                 onChange={(e) =>
                   setCustomerName(
                     e.target.value
@@ -1360,7 +1703,9 @@ export default function ReceiptPage() {
 
               <input
                 type="date"
-                value={receiptDate}
+                value={
+                  receiptDate
+                }
                 onChange={(e) =>
                   setReceiptDate(
                     e.target.value
@@ -1380,7 +1725,9 @@ export default function ReceiptPage() {
               </label>
 
               <select
-                value={paymentMethod}
+                value={
+                  paymentMethod
+                }
                 onChange={(e) =>
                   setPaymentMethod(
                     e.target.value as PaymentMethod
@@ -1423,7 +1770,9 @@ export default function ReceiptPage() {
 
               <button
                 type="button"
-                onClick={addItem}
+                onClick={
+                  addItem
+                }
                 className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700"
               >
                 + Add Item
@@ -1434,10 +1783,15 @@ export default function ReceiptPage() {
             <div className="space-y-4">
 
               {items.map(
-                (item, index) => (
+                (
+                  item,
+                  index
+                ) => (
 
                   <div
-                    key={index}
+                    key={
+                      index
+                    }
                     className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
                   >
 
@@ -1451,12 +1805,15 @@ export default function ReceiptPage() {
 
                       <input
                         type="text"
-                        value={item.name}
+                        value={
+                          item.name
+                        }
                         onChange={(e) =>
                           updateItem(
                             index,
                             "name",
-                            e.target.value
+                            e.target
+                              .value
                           )
                         }
                         placeholder="Item / Service"
@@ -1486,14 +1843,18 @@ export default function ReceiptPage() {
                           onChange={(e) => {
 
                             const value =
-                              e.target.value;
+                              e.target
+                                .value;
 
                             updateItem(
                               index,
                               "quantity",
-                              value === ""
+                              value ===
+                                ""
                                 ? ""
-                                : Number(value)
+                                : Number(
+                                    value
+                                  )
                             );
 
                           }}
@@ -1515,17 +1876,20 @@ export default function ReceiptPage() {
                           type="number"
                           min="0"
                           value={
-                            item.unitPrice || ""
+                            item.unitPrice ||
+                            ""
                           }
                           onChange={(e) => {
 
                             const value =
-                              e.target.value;
+                              e.target
+                                .value;
 
                             updateItem(
                               index,
                               "unitPrice",
-                              value === ""
+                              value ===
+                                ""
                                 ? 0
                                 : Math.max(
                                     Number(
@@ -1557,7 +1921,8 @@ export default function ReceiptPage() {
                         )}
                       </p>
 
-                      {items.length > 1 && (
+                      {items.length >
+                        1 && (
                         <button
                           type="button"
                           onClick={() =>
@@ -1614,24 +1979,35 @@ export default function ReceiptPage() {
             <input
               type="number"
               min="0"
-              max={grandTotal}
+              max={
+                grandTotal
+              }
               value={
-                amountPaid || ""
+                amountPaid ||
+                ""
               }
               onChange={(e) => {
 
                 const value =
-                  e.target.value;
+                  e.target
+                    .value;
 
-                if (value === "") {
-                  setAmountPaid(0);
+                if (
+                  value ===
+                  ""
+                ) {
+                  setAmountPaid(
+                    0
+                  );
                   return;
                 }
 
                 setAmountPaid(
                   Math.min(
                     Math.max(
-                      Number(value),
+                      Number(
+                        value
+                      ),
                       0
                     ),
                     grandTotal
@@ -1672,7 +2048,8 @@ export default function ReceiptPage() {
 
             <span
               className={`font-extrabold ${
-                paymentStatus === "Paid"
+                paymentStatus ===
+                "Paid"
                   ? "text-green-600"
                   : paymentStatus ===
                     "Partially Paid"
@@ -1689,8 +2066,12 @@ export default function ReceiptPage() {
 
           <button
             type="button"
-            onClick={generateReceipt}
-            disabled={saving}
+            onClick={
+              generateReceipt
+            }
+            disabled={
+              saving
+            }
             className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving
