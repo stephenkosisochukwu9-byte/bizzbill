@@ -5,9 +5,6 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  useRouter,
-} from "next/navigation";
 import { toPng } from "html-to-image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -32,6 +29,7 @@ type PaymentStatus =
 type BusinessProfile = {
   business_name: string | null;
   address: string | null;
+  logo_url: string | null;
 };
 
 type SavedReceipt = {
@@ -46,8 +44,14 @@ type SavedReceipt = {
   total_amount: number;
   amount_paid: number;
   balance_due: number;
-  payment_status: PaymentStatus | string | null;
-  payment_method: PaymentMethod | string | null;
+  payment_status:
+    | PaymentStatus
+    | string
+    | null;
+  payment_method:
+    | PaymentMethod
+    | string
+    | null;
   business_name: string | null;
   business_address: string | null;
   created_at: string;
@@ -55,24 +59,9 @@ type SavedReceipt = {
 
 export default function ReceiptPage() {
   const supabase = createClient();
-  const router = useRouter();
 
   const receiptRef =
     useRef<HTMLDivElement>(null);
-
-  /* =========================
-     AUTHENTICATION
-  ========================= */
-
-  const [authChecking, setAuthChecking] =
-    useState(true);
-
-  const [authenticated, setAuthenticated] =
-    useState(false);
-
-  /* =========================
-     RECEIPT STATE
-  ========================= */
 
   const [generated, setGenerated] =
     useState(false);
@@ -124,211 +113,81 @@ export default function ReceiptPage() {
       },
     ]);
 
-  /* =====================================================
-     CHECK AUTHENTICATION FIRST
-     
-     This protects the entire receipt page.
-     
-     If the user is not logged in:
-     /receipt
-     
-     becomes:
-     /login?redirect=/receipt
-     
-     If they opened:
-     /receipt?id=123
-     
-     they are sent to:
-     /login?redirect=/receipt%3Fid%3D123
-  ===================================================== */
+  /* =========================
+     GET BUSINESS PROFILE
+  ========================= */
 
   useEffect(() => {
-    let mounted = true;
-
-    const checkAuthentication = async () => {
+    const getBusinessProfile = async () => {
       try {
-        setAuthChecking(true);
+        setProfileLoading(true);
 
         const {
           data: { user },
-          error,
+          error: userError,
         } = await supabase.auth.getUser();
 
-        if (error) {
+        if (userError) {
           console.error(
-            "Authentication check error:",
-            error
+            "User fetch error:",
+            userError
           );
-        }
-
-        if (!mounted) {
           return;
         }
 
         if (!user) {
-          setAuthenticated(false);
-
-          const currentPath =
-            window.location.pathname +
-            window.location.search;
-
-          const loginUrl =
-            `/login?redirect=${encodeURIComponent(
-              currentPath
-            )}`;
-
-          router.replace(loginUrl);
-
+          console.error(
+            "No logged-in user found."
+          );
           return;
         }
 
-        setAuthenticated(true);
+        const { data, error } =
+          await supabase
+            .from("business_profiles")
+            .select(
+              "business_name, address, logo_url"
+            )
+            .eq("user_id", user.id)
+            .order("created_at", {
+              ascending: false,
+            })
+            .limit(1);
+
+        if (error) {
+          console.error(
+            "Business profile fetch error:",
+            error
+          );
+          return;
+        }
+
+        if (
+          data &&
+          data.length > 0
+        ) {
+          setBusinessProfile(
+            data[0]
+          );
+        }
       } catch (error) {
         console.error(
-          "Authentication check failed:",
+          "Profile fetch error:",
           error
         );
-
-        if (!mounted) {
-          return;
-        }
-
-        const currentPath =
-          window.location.pathname +
-          window.location.search;
-
-        const loginUrl =
-          `/login?redirect=${encodeURIComponent(
-            currentPath
-          )}`;
-
-        router.replace(loginUrl);
       } finally {
-        if (mounted) {
-          setAuthChecking(false);
-        }
+        setProfileLoading(false);
       }
     };
 
-    checkAuthentication();
-
-    return () => {
-      mounted = false;
-    };
-  }, [router, supabase]);
-
-  /* =====================================================
-     GET BUSINESS PROFILE
-     
-     Only runs after authentication is confirmed.
-  ===================================================== */
-
-  useEffect(() => {
-    if (
-      authChecking ||
-      !authenticated
-    ) {
-      return;
-    }
-
-    const getBusinessProfile =
-      async () => {
-        try {
-          setProfileLoading(true);
-
-          const {
-            data: { user },
-            error: userError,
-          } = await supabase.auth.getUser();
-
-          if (userError) {
-            console.error(
-              "User fetch error:",
-              userError
-            );
-            return;
-          }
-
-          if (!user) {
-            return;
-          }
-
-          const {
-            data,
-            error,
-          } = await supabase
-            .from("business_profiles")
-            .select(
-              "business_name, address"
-            )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              }
-            )
-            .limit(1);
-
-          if (error) {
-            console.error(
-              "Business profile fetch error:",
-              error
-            );
-            return;
-          }
-
-          if (
-            data &&
-            data.length > 0
-          ) {
-            setBusinessProfile(
-              data[0]
-            );
-          } else {
-            console.log(
-              "No business profile found."
-            );
-          }
-        } catch (error) {
-          console.error(
-            "Profile fetch error:",
-            error
-          );
-        } finally {
-          setProfileLoading(false);
-        }
-      };
-
     getBusinessProfile();
-  }, [
-    authChecking,
-    authenticated,
-    supabase,
-  ]);
+  }, [supabase]);
 
-  /* =====================================================
+  /* =========================
      FETCH SAVED RECEIPT
-     
-     If URL is:
-     /receipt?id=123
-     
-     fetch that exact receipt.
-     
-     Only runs after authentication is confirmed.
-  ===================================================== */
+  ========================= */
 
   useEffect(() => {
-    if (
-      authChecking ||
-      !authenticated
-    ) {
-      return;
-    }
-
     const fetchSavedReceipt =
       async () => {
         try {
@@ -339,9 +198,6 @@ export default function ReceiptPage() {
 
           const receiptId =
             params.get("id");
-
-          /* No ID means normal
-             create-receipt mode. */
 
           if (!receiptId) {
             return;
@@ -363,22 +219,11 @@ export default function ReceiptPage() {
           }
 
           if (!user) {
-            const currentPath =
-              window.location.pathname +
-              window.location.search;
-
-            router.replace(
-              `/login?redirect=${encodeURIComponent(
-                currentPath
-              )}`
+            alert(
+              "You must be logged in to view this receipt."
             );
-
             return;
           }
-
-          /* =========================
-             FETCH EXACT DOCUMENT
-          ========================= */
 
           const {
             data,
@@ -386,18 +231,9 @@ export default function ReceiptPage() {
           } = await supabase
             .from("documents")
             .select("*")
-            .eq(
-              "id",
-              receiptId
-            )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .eq(
-              "document_type",
-              "receipt"
-            )
+            .eq("id", receiptId)
+            .eq("user_id", user.id)
+            .eq("document_type", "receipt")
             .maybeSingle();
 
           if (error) {
@@ -484,7 +320,8 @@ export default function ReceiptPage() {
             Array.isArray(
               saved.items
             ) &&
-            saved.items.length > 0
+            saved.items.length >
+              0
           ) {
             setItems(
               saved.items.map(
@@ -492,6 +329,7 @@ export default function ReceiptPage() {
                   name:
                     item?.name ||
                     "",
+
                   quantity:
                     item?.quantity ===
                       "" ||
@@ -503,6 +341,7 @@ export default function ReceiptPage() {
                       : Number(
                           item.quantity
                         ),
+
                   unitPrice:
                     Number(
                       item?.unitPrice ||
@@ -522,20 +361,30 @@ export default function ReceiptPage() {
           }
 
           /* =========================
-             USE SAVED BUSINESS INFO
-             IF AVAILABLE
+             KEEP CURRENT LOGO
           ========================= */
 
           if (
             saved.business_name ||
             saved.business_address
           ) {
-            setBusinessProfile({
-              business_name:
-                saved.business_name,
-              address:
-                saved.business_address,
-            });
+            setBusinessProfile(
+              (current) => ({
+                business_name:
+                  saved.business_name ||
+                  current?.business_name ||
+                  null,
+
+                address:
+                  saved.business_address ||
+                  current?.address ||
+                  null,
+
+                logo_url:
+                  current?.logo_url ||
+                  null,
+              })
+            );
           }
 
           /* =========================
@@ -547,7 +396,8 @@ export default function ReceiptPage() {
           setTimeout(() => {
             window.scrollTo({
               top: 0,
-              behavior: "smooth",
+              behavior:
+                "smooth",
             });
           }, 100);
         } catch (error) {
@@ -565,12 +415,7 @@ export default function ReceiptPage() {
       };
 
     fetchSavedReceipt();
-  }, [
-    authChecking,
-    authenticated,
-    router,
-    supabase,
-  ]);
+  }, [supabase]);
 
   /* =========================
      ITEM TOTAL
@@ -580,12 +425,8 @@ export default function ReceiptPage() {
     item: Item
   ) => {
     return (
-      Number(
-        item.quantity || 0
-      ) *
-      Number(
-        item.unitPrice || 0
-      )
+      Number(item.quantity || 0) *
+      Number(item.unitPrice || 0)
     );
   };
 
@@ -596,8 +437,7 @@ export default function ReceiptPage() {
   const grandTotal =
     items.reduce(
       (total, item) =>
-        total +
-        itemTotal(item),
+        total + itemTotal(item),
       0
     );
 
@@ -633,18 +473,17 @@ export default function ReceiptPage() {
     field: keyof Item,
     value: string | number
   ) => {
-    setItems(
-      (current) =>
-        current.map(
-          (item, i) =>
-            i === index
-              ? {
-                  ...item,
-                  [field]:
-                    value,
-                }
-              : item
-        )
+    setItems((current) =>
+      current.map(
+        (item, i) =>
+          i === index
+            ? {
+                ...item,
+                [field]:
+                  value,
+              }
+            : item
+      )
     );
   };
 
@@ -653,16 +492,14 @@ export default function ReceiptPage() {
   ========================= */
 
   const addItem = () => {
-    setItems(
-      (current) => [
-        ...current,
-        {
-          name: "",
-          quantity: "",
-          unitPrice: 0,
-        },
-      ]
-    );
+    setItems((current) => [
+      ...current,
+      {
+        name: "",
+        quantity: "",
+        unitPrice: 0,
+      },
+    ]);
   };
 
   /* =========================
@@ -672,24 +509,20 @@ export default function ReceiptPage() {
   const removeItem = (
     index: number
   ) => {
-    if (
-      items.length === 1
-    ) {
+    if (items.length === 1) {
       return;
     }
 
-    setItems(
-      (current) =>
-        current.filter(
-          (_, i) =>
-            i !== index
-        )
+    setItems((current) =>
+      current.filter(
+        (_, i) => i !== index
+      )
     );
   };
 
-  /* =====================================================
+  /* =========================
      GENERATE + SAVE RECEIPT
-  ===================================================== */
+  ========================= */
 
   const generateReceipt =
     async () => {
@@ -698,52 +531,7 @@ export default function ReceiptPage() {
       }
 
       /* =========================
-         AUTH CHECK
-         
-         Extra protection even though
-         the page itself is protected.
-      ========================= */
-
-      const {
-        data: {
-          user,
-        },
-        error:
-          userError,
-      } =
-        await supabase.auth.getUser();
-
-      if (
-        userError
-      ) {
-        console.error(
-          "User fetch error:",
-          userError
-        );
-
-        alert(
-          "Unable to verify your account. Please try again."
-        );
-
-        return;
-      }
-
-      if (!user) {
-        const currentPath =
-          window.location.pathname +
-          window.location.search;
-
-        router.replace(
-          `/login?redirect=${encodeURIComponent(
-            currentPath
-          )}`
-        );
-
-        return;
-      }
-
-      /* =========================
-         BASIC VALIDATION
+         VALIDATION
       ========================= */
 
       if (
@@ -755,9 +543,7 @@ export default function ReceiptPage() {
         return;
       }
 
-      if (
-        !customerName.trim()
-      ) {
+      if (!customerName.trim()) {
         alert(
           "Please enter customer name."
         );
@@ -786,11 +572,9 @@ export default function ReceiptPage() {
       if (
         items.some(
           (item) =>
-            item.quantity ===
-              "" ||
-            Number(
-              item.quantity
-            ) <= 0
+            item.quantity === "" ||
+            Number(item.quantity) <=
+              0
         )
       ) {
         alert(
@@ -813,9 +597,7 @@ export default function ReceiptPage() {
         return;
       }
 
-      if (
-        grandTotal <= 0
-      ) {
+      if (grandTotal <= 0) {
         alert(
           "Receipt total must be greater than ₦0."
         );
@@ -826,31 +608,53 @@ export default function ReceiptPage() {
         setSaving(true);
 
         /* =========================
-           GENERATE RECEIPT NUMBER
+           GET CURRENT USER
+        ========================= */
 
-           Only generate a new number
-           when creating a NEW receipt.
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.error(
+            "User fetch error:",
+            userError
+          );
+
+          alert(
+            "Unable to verify your account. Please try again."
+          );
+
+          return;
+        }
+
+        if (!user) {
+          alert(
+            "You must be logged in to generate a receipt."
+          );
+
+          return;
+        }
+
+        /* =========================
+           RECEIPT NUMBER
         ========================= */
 
         let finalReceiptNumber =
           receiptNumber;
 
-        if (
-          !finalReceiptNumber
-        ) {
+        if (!finalReceiptNumber) {
           const {
             data:
               generatedNumber,
             error:
               numberError,
-          } =
-            await supabase.rpc(
-              "get_next_receipt_number"
-            );
+          } = await supabase.rpc(
+            "get_next_receipt_number"
+          );
 
-          if (
-            numberError
-          ) {
+          if (numberError) {
             console.error(
               "Receipt number generation error:",
               numberError
@@ -863,9 +667,7 @@ export default function ReceiptPage() {
             return;
           }
 
-          if (
-            !generatedNumber
-          ) {
+          if (!generatedNumber) {
             alert(
               "Unable to generate receipt number. Please try again."
             );
@@ -888,8 +690,7 @@ export default function ReceiptPage() {
         ========================= */
 
         const receiptData = {
-          user_id:
-            user.id,
+          user_id: user.id,
 
           document_type:
             "receipt",
@@ -931,39 +732,32 @@ export default function ReceiptPage() {
         };
 
         /* =========================
-           UPDATE EXISTING RECEIPT
+           UPDATE EXISTING
         ========================= */
 
-        if (
-          savedReceiptId
-        ) {
+        if (savedReceiptId) {
           const {
             error:
               updateError,
-          } =
-            await supabase
-              .from(
-                "documents"
-              )
-              .update(
-                receiptData
-              )
-              .eq(
-                "id",
-                savedReceiptId
-              )
-              .eq(
-                "user_id",
-                user.id
-              )
-              .eq(
-                "document_type",
-                "receipt"
-              );
+          } = await supabase
+            .from("documents")
+            .update(
+              receiptData
+            )
+            .eq(
+              "id",
+              savedReceiptId
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .eq(
+              "document_type",
+              "receipt"
+            );
 
-          if (
-            updateError
-          ) {
+          if (updateError) {
             console.error(
               "Receipt update error:",
               updateError
@@ -977,7 +771,7 @@ export default function ReceiptPage() {
           }
         } else {
           /* =========================
-             INSERT NEW RECEIPT
+             INSERT NEW
           ========================= */
 
           const {
@@ -985,22 +779,15 @@ export default function ReceiptPage() {
               insertedReceipt,
             error:
               insertError,
-          } =
-            await supabase
-              .from(
-                "documents"
-              )
-              .insert(
-                receiptData
-              )
-              .select(
-                "id"
-              )
-              .single();
+          } = await supabase
+            .from("documents")
+            .insert(
+              receiptData
+            )
+            .select("id")
+            .single();
 
-          if (
-            insertError
-          ) {
+          if (insertError) {
             console.error(
               "Receipt save error:",
               insertError
@@ -1023,12 +810,10 @@ export default function ReceiptPage() {
         }
 
         /* =========================
-           SHOW GENERATED RECEIPT
+           SHOW RECEIPT
         ========================= */
 
-        setGenerated(
-          true
-        );
+        setGenerated(true);
 
         setTimeout(() => {
           window.scrollTo({
@@ -1057,9 +842,7 @@ export default function ReceiptPage() {
 
   const saveAsImage =
     async () => {
-      if (
-        !receiptRef.current
-      ) {
+      if (!receiptRef.current) {
         return;
       }
 
@@ -1094,39 +877,32 @@ export default function ReceiptPage() {
         );
 
         const dataUrl =
-          await toPng(
-            element,
-            {
-              width: 720,
-              height:
-                element.scrollHeight,
-              pixelRatio: 2,
-              quality: 1,
-              backgroundColor:
-                "#ffffff",
-              cacheBust: true,
-            }
-          );
+          await toPng(element, {
+            width: 720,
+            height:
+              element.scrollHeight,
+            pixelRatio: 2,
+            quality: 1,
+            backgroundColor:
+              "#ffffff",
+            cacheBust: true,
+          });
 
         const link =
           document.createElement(
             "a"
           );
 
-        link.download =
-          `Receipt-${
-            receiptNumber ||
-            "receipt"
-          }.png`;
+        link.download = `Receipt-${
+          receiptNumber ||
+          "receipt"
+        }.png`;
 
-        link.href =
-          dataUrl;
+        link.href = dataUrl;
 
         link.click();
       } catch (error) {
-        console.error(
-          error
-        );
+        console.error(error);
 
         alert(
           "Unable to save the receipt as an image. Please try again."
@@ -1143,41 +919,14 @@ export default function ReceiptPage() {
       }
     };
 
-  /* =====================================================
-     AUTHENTICATION LOADING
-     
-     Do NOT render the receipt form before we know whether
-     the visitor is logged in.
-  ===================================================== */
-
-  if (
-    authChecking ||
-    !authenticated
-  ) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-        <div className="text-center">
-
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-
-          <p className="mt-4 text-sm font-extrabold text-gray-700">
-            Checking your account...
-          </p>
-
-        </div>
-      </main>
-    );
-  }
-
   /* =========================
-     LOADING SAVED RECEIPT
+     LOADING
   ========================= */
 
-  if (
-    loadingReceipt
-  ) {
+  if (loadingReceipt) {
     return (
       <main className="min-h-screen bg-gray-100 px-4 py-8">
+
         <div className="mx-auto flex min-h-[70vh] w-full max-w-4xl flex-col items-center justify-center text-center">
 
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
@@ -1191,17 +940,16 @@ export default function ReceiptPage() {
           </p>
 
         </div>
+
       </main>
     );
   }
 
-  /* ==================================================
+  /* =========================
      GENERATED RECEIPT
-  ================================================== */
+  ========================= */
 
-  if (
-    generated
-  ) {
+  if (generated) {
     return (
       <>
         <style jsx global>{`
@@ -1247,9 +995,7 @@ export default function ReceiptPage() {
             <button
               type="button"
               onClick={() =>
-                setGenerated(
-                  false
-                )
+                setGenerated(false)
               }
               className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-extrabold text-blue-700 shadow-sm transition hover:bg-blue-50"
             >
@@ -1276,20 +1022,44 @@ export default function ReceiptPage() {
 
                 <div className="min-w-0">
 
-                  <h1 className="break-words text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
-                    {businessProfile?.business_name ||
-                      "BizzBill"}
-                  </h1>
+                  <div className="flex items-start gap-4">
 
-                  {businessProfile?.address && (
-                    <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-800 sm:text-base">
-                      {businessProfile.address}
-                    </p>
-                  )}
+                    {businessProfile?.logo_url && (
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white sm:h-24 sm:w-24">
 
-                  <p className="mt-2 text-sm font-semibold text-gray-800 sm:text-base">
-                    Payment Receipt
-                  </p>
+                        <img
+                          src={
+                            businessProfile.logo_url
+                          }
+                          alt={`${businessProfile.business_name || "Business"} logo`}
+                          className="h-full w-full object-contain p-2"
+                        />
+
+                      </div>
+                    )}
+
+                    <div className="min-w-0">
+
+                      <h1 className="break-words text-3xl font-extrabold tracking-tight text-gray-950 sm:text-4xl">
+                        {businessProfile?.business_name ||
+                          "BizzBill"}
+                      </h1>
+
+                      {businessProfile?.address && (
+                        <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-800 sm:text-base">
+                          {
+                            businessProfile.address
+                          }
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-sm font-semibold text-gray-800 sm:text-base">
+                        Payment Receipt
+                      </p>
+
+                    </div>
+
+                  </div>
 
                 </div>
 
@@ -1306,14 +1076,18 @@ export default function ReceiptPage() {
                     <p>
                       Receipt No:{" "}
                       <span className="font-extrabold text-gray-950">
-                        {receiptNumber}
+                        {
+                          receiptNumber
+                        }
                       </span>
                     </p>
 
                     <p>
                       Date:{" "}
                       <span className="font-extrabold text-gray-950">
-                        {receiptDate}
+                        {
+                          receiptDate
+                        }
                       </span>
                     </p>
 
@@ -1329,8 +1103,6 @@ export default function ReceiptPage() {
 
             <div className="grid grid-cols-1 gap-7 border-b border-gray-200 px-5 py-7 sm:grid-cols-2 sm:px-10 sm:py-9">
 
-              {/* CUSTOMER */}
-
               <div>
 
                 <p className="text-xs font-extrabold uppercase tracking-wide text-gray-700 sm:text-sm">
@@ -1338,12 +1110,12 @@ export default function ReceiptPage() {
                 </p>
 
                 <p className="mt-2 break-words text-xl font-extrabold text-gray-950 sm:text-2xl">
-                  {customerName}
+                  {
+                    customerName
+                  }
                 </p>
 
               </div>
-
-              {/* PAYMENT METHOD */}
 
               <div className="sm:text-right">
 
@@ -1352,7 +1124,9 @@ export default function ReceiptPage() {
                 </p>
 
                 <p className="mt-2 text-xl font-extrabold text-blue-700 sm:text-2xl">
-                  {paymentMethod}
+                  {
+                    paymentMethod
+                  }
                 </p>
 
               </div>
@@ -1407,11 +1181,15 @@ export default function ReceiptPage() {
                         >
 
                           <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
-                            {item.name}
+                            {
+                              item.name
+                            }
                           </td>
 
                           <td className="py-5 text-center text-sm font-bold text-gray-950 sm:text-base">
-                            {item.quantity}
+                            {
+                              item.quantity
+                            }
                           </td>
 
                           <td className="whitespace-nowrap py-5 text-right text-sm font-semibold text-gray-950 sm:text-base">
@@ -1513,7 +1291,9 @@ export default function ReceiptPage() {
                         : "text-red-600"
                     }`}
                   >
-                    {paymentStatus}
+                    {
+                      paymentStatus
+                    }
                   </span>
 
                 </div>
@@ -1569,9 +1349,9 @@ export default function ReceiptPage() {
     );
   }
 
-  /* ==================================================
+  /* =========================
      RECEIPT FORM
-  ================================================== */
+  ========================= */
 
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 sm:py-10">
@@ -1608,7 +1388,7 @@ export default function ReceiptPage() {
 
         <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
 
-          {/* BUSINESS PROFILE PREVIEW */}
+          {/* BUSINESS PROFILE */}
 
           <div className="mb-7 rounded-2xl border border-blue-100 bg-blue-50 p-5">
 
@@ -1626,16 +1406,42 @@ export default function ReceiptPage() {
 
               <div className="mt-2">
 
-                <p className="text-xl font-extrabold text-gray-950">
-                  {businessProfile.business_name ||
-                    "Business name not set"}
-                </p>
+                <div className="flex items-center gap-4">
 
-                {businessProfile.address && (
-                  <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-800">
-                    {businessProfile.address}
-                  </p>
-                )}
+                  {businessProfile.logo_url && (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white">
+
+                      <img
+                        src={
+                          businessProfile.logo_url
+                        }
+                        alt="Business logo"
+                        className="h-full w-full object-contain p-2"
+                      />
+
+                    </div>
+                  )}
+
+                  <div>
+
+                    <p className="text-xl font-extrabold text-gray-950">
+                      {
+                        businessProfile.business_name ||
+                        "Business name not set"
+                      }
+                    </p>
+
+                    {businessProfile.address && (
+                      <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-800">
+                        {
+                          businessProfile.address
+                        }
+                      </p>
+                    )}
+
+                  </div>
+
+                </div>
 
                 <p className="mt-3 text-xs font-semibold text-blue-800">
                   This information will automatically appear on your receipt.
@@ -1669,8 +1475,6 @@ export default function ReceiptPage() {
 
           <div className="grid gap-5 sm:grid-cols-2">
 
-            {/* CUSTOMER NAME */}
-
             <div>
 
               <label className="mb-2 block text-sm font-extrabold text-gray-950">
@@ -1693,8 +1497,6 @@ export default function ReceiptPage() {
 
             </div>
 
-            {/* DATE */}
-
             <div>
 
               <label className="mb-2 block text-sm font-extrabold text-gray-950">
@@ -1716,8 +1518,6 @@ export default function ReceiptPage() {
 
             </div>
 
-            {/* PAYMENT METHOD */}
-
             <div>
 
               <label className="mb-2 block text-sm font-extrabold text-gray-950">
@@ -1730,7 +1530,8 @@ export default function ReceiptPage() {
                 }
                 onChange={(e) =>
                   setPaymentMethod(
-                    e.target.value as PaymentMethod
+                    e.target
+                      .value as PaymentMethod
                   )
                 }
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-extrabold text-gray-950 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -1795,8 +1596,6 @@ export default function ReceiptPage() {
                     className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
                   >
 
-                    {/* ITEM */}
-
                     <div>
 
                       <label className="mb-2 block text-sm font-extrabold text-gray-900">
@@ -1822,11 +1621,7 @@ export default function ReceiptPage() {
 
                     </div>
 
-                    {/* QUANTITY + PRICE */}
-
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
-
-                      {/* QUANTITY */}
 
                       <div>
 
@@ -1863,8 +1658,6 @@ export default function ReceiptPage() {
                         />
 
                       </div>
-
-                      {/* UNIT PRICE */}
 
                       <div>
 
@@ -1908,8 +1701,6 @@ export default function ReceiptPage() {
 
                     </div>
 
-                    {/* ITEM TOTAL */}
-
                     <div className="mt-4 flex items-center justify-between gap-4">
 
                       <p className="text-sm font-extrabold text-gray-950 sm:text-base">
@@ -1947,7 +1738,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* TOTAL AMOUNT */}
+          {/* TOTAL */}
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
 
@@ -1989,13 +1780,9 @@ export default function ReceiptPage() {
               onChange={(e) => {
 
                 const value =
-                  e.target
-                    .value;
+                  e.target.value;
 
-                if (
-                  value ===
-                  ""
-                ) {
+                if (value === "") {
                   setAmountPaid(
                     0
                   );
@@ -2021,7 +1808,7 @@ export default function ReceiptPage() {
 
           </div>
 
-          {/* BALANCE DUE */}
+          {/* BALANCE */}
 
           <div className="mt-4 flex items-center justify-between gap-5 rounded-xl bg-red-50 p-4">
 
@@ -2057,21 +1844,21 @@ export default function ReceiptPage() {
                   : "text-red-600"
               }`}
             >
-              {paymentStatus}
+              {
+                paymentStatus
+              }
             </span>
 
           </div>
 
-          {/* GENERATE / UPDATE */}
+          {/* GENERATE */}
 
           <button
             type="button"
             onClick={
               generateReceipt
             }
-            disabled={
-              saving
-            }
+            disabled={saving}
             className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving
