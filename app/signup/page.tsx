@@ -4,59 +4,71 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import NotificationModal from "@/components/NotificationModal";
 
 export default function SignupPage() {
   const supabase = createClient();
   const router = useRouter();
 
-  const fileInputRef =
-    useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* =========================
      PERSONAL INFORMATION
   ========================= */
 
-  const [name, setName] =
-    useState("");
-
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [showPassword, setShowPassword] =
-    useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   /* =========================
      BUSINESS INFORMATION
   ========================= */
 
-  const [businessName, setBusinessName] =
-    useState("");
-
-  const [businessAddress, setBusinessAddress] =
-    useState("");
-
-  const [socialHandle, setSocialHandle] =
-    useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [socialHandle, setSocialHandle] = useState("");
 
   /* =========================
      LOGO
   ========================= */
 
-  const [logoFile, setLogoFile] =
-    useState<File | null>(null);
-
-  const [logoPreview, setLogoPreview] =
-    useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   /* =========================
      LOADING
   ========================= */
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
+
+  /* =========================
+     NOTIFICATION
+  ========================= */
+
+  const [notificationOpen, setNotificationOpen] = useState(false);
+
+  const [notificationType, setNotificationType] = useState<
+    "success" | "error"
+  >("success");
+
+  const [notificationTitle, setNotificationTitle] = useState("");
+  const [notificationMessage, setNotificationMessage] = useState("");
+
+  /* =========================
+     SHOW NOTIFICATION
+  ========================= */
+
+  const showNotification = (
+    type: "success" | "error",
+    title: string,
+    message: string
+  ) => {
+    setNotificationType(type);
+    setNotificationTitle(title);
+    setNotificationMessage(message);
+    setNotificationOpen(true);
+  };
 
   /* =========================
      LOGO SELECT
@@ -65,8 +77,7 @@ export default function SignupPage() {
   const handleLogoChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file =
-      e.target.files?.[0];
+    const file = e.target.files?.[0];
 
     if (!file) {
       return;
@@ -77,8 +88,10 @@ export default function SignupPage() {
     ========================= */
 
     if (!file.type.startsWith("image/")) {
-      alert(
-        "Please select an image file."
+      showNotification(
+        "error",
+        "Invalid file",
+        "Please select a valid image file for your business logo."
       );
 
       if (fileInputRef.current) {
@@ -92,12 +105,11 @@ export default function SignupPage() {
        CHECK FILE SIZE
     ========================= */
 
-    if (
-      file.size >
-      5 * 1024 * 1024
-    ) {
-      alert(
-        "Logo must be smaller than 5MB."
+    if (file.size > 5 * 1024 * 1024) {
+      showNotification(
+        "error",
+        "Logo is too large",
+        "Your business logo must be smaller than 5MB."
       );
 
       if (fileInputRef.current) {
@@ -111,26 +123,18 @@ export default function SignupPage() {
        CLEAN OLD PREVIEW
     ========================= */
 
-    if (
-      logoPreview?.startsWith("blob:")
-    ) {
-      URL.revokeObjectURL(
-        logoPreview
-      );
+    if (logoPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(logoPreview);
     }
 
     /* =========================
        CREATE NEW PREVIEW
     ========================= */
 
-    const previewUrl =
-      URL.createObjectURL(file);
+    const previewUrl = URL.createObjectURL(file);
 
     setLogoFile(file);
-
-    setLogoPreview(
-      previewUrl
-    );
+    setLogoPreview(previewUrl);
   };
 
   /* =========================
@@ -138,16 +142,11 @@ export default function SignupPage() {
   ========================= */
 
   const handleRemoveLogo = () => {
-    if (
-      logoPreview?.startsWith("blob:")
-    ) {
-      URL.revokeObjectURL(
-        logoPreview
-      );
+    if (logoPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(logoPreview);
     }
 
     setLogoFile(null);
-
     setLogoPreview(null);
 
     if (fileInputRef.current) {
@@ -160,7 +159,7 @@ export default function SignupPage() {
   ========================= */
 
   const handleSignup = async (
-    e: React.FormEvent
+    e: React.FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
@@ -174,7 +173,9 @@ export default function SignupPage() {
       !password ||
       !businessName.trim()
     ) {
-      alert(
+      showNotification(
+        "error",
+        "Missing information",
         "Please fill in your name, email, password, and business name."
       );
 
@@ -182,8 +183,10 @@ export default function SignupPage() {
     }
 
     if (password.length < 6) {
-      alert(
-        "Password must be at least 6 characters."
+      showNotification(
+        "error",
+        "Password too short",
+        "Your password must be at least 6 characters long."
       );
 
       return;
@@ -196,46 +199,45 @@ export default function SignupPage() {
          CREATE AUTH ACCOUNT
       ========================= */
 
-      const {
-        data,
-        error,
-      } =
+      const { data, error } =
         await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
             data: {
-              name:
-                name.trim(),
-
-              business_name:
-                businessName.trim(),
-
-              business_address:
-                businessAddress.trim(),
-
+              name: name.trim(),
+              business_name: businessName.trim(),
+              business_address: businessAddress.trim(),
               social_handle:
-                socialHandle.trim() ||
-                null,
+                socialHandle.trim() || null,
             },
           },
         });
 
-      if (error) {
-        console.error(
-          "Signup error:",
-          error
-        );
+      /* =========================
+         AUTH ERROR
+      ========================= */
 
-        alert(
+      if (error) {
+        console.error("Signup error:", error);
+
+        showNotification(
+          "error",
+          "Account creation failed",
           error.message
         );
 
         return;
       }
 
+      /* =========================
+         CHECK USER
+      ========================= */
+
       if (!data.user) {
-        alert(
+        showNotification(
+          "error",
+          "Account creation failed",
           "Unable to create your account. Please try again."
         );
 
@@ -248,24 +250,22 @@ export default function SignupPage() {
 
       const {
         data: sessionData,
-      } =
-        await supabase.auth.getSession();
+      } = await supabase.auth.getSession();
 
-      const session =
-        sessionData.session;
+      const session = sessionData.session;
 
       /*
         If email confirmation is enabled,
-        Supabase may create the user but
-        not give us a session yet.
+        Supabase creates the user but may not
+        give us an active session yet.
       */
 
       if (!session) {
-        alert(
-          "Your account was created successfully. Please check your email to confirm your account, then log in to complete your business profile and logo setup."
+        showNotification(
+          "success",
+          "Account created!",
+          "Your account was created successfully. Please check your email to confirm your account, then log in to continue setting up your business profile."
         );
-
-        router.push("/login");
 
         return;
       }
@@ -274,9 +274,7 @@ export default function SignupPage() {
          LOGO URL
       ========================= */
 
-      let logoUrl:
-        | string
-        | null = null;
+      let logoUrl: string | null = null;
 
       /* =========================
          UPLOAD LOGO
@@ -287,30 +285,24 @@ export default function SignupPage() {
           logoFile.name
             .split(".")
             .pop()
-            ?.toLowerCase() ||
-          "png";
+            ?.toLowerCase() || "png";
 
         const filePath =
           `${data.user.id}/logo-${Date.now()}.${fileExtension}`;
 
         const {
           error: uploadError,
-        } =
-          await supabase.storage
-            .from("business-logos")
-            .upload(
-              filePath,
-              logoFile,
-              {
-                cacheControl:
-                  "3600",
+        } = await supabase.storage
+          .from("business-logos")
+          .upload(filePath, logoFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: logoFile.type,
+          });
 
-                upsert: false,
-
-                contentType:
-                  logoFile.type,
-              }
-            );
+        /* =========================
+           LOGO UPLOAD ERROR
+        ========================= */
 
         if (uploadError) {
           console.error(
@@ -318,71 +310,59 @@ export default function SignupPage() {
             uploadError
           );
 
-          alert(
-            "Your account was created, but the logo could not be uploaded. You can add it later from My Account."
+          showNotification(
+            "error",
+            "Logo upload failed",
+            "Your account can still be created, but the logo could not be uploaded. You can add your logo later from My Account."
           );
 
-          /*
-            We continue because the
-            account itself is valid.
-          */
-        } else {
-          /* =========================
-             GET PUBLIC URL
-          ========================= */
-
-          const {
-            data: publicUrlData,
-          } =
-            supabase.storage
-              .from(
-                "business-logos"
-              )
-              .getPublicUrl(
-                filePath
-              );
-
-          logoUrl =
-            publicUrlData.publicUrl;
+          return;
         }
+
+        /* =========================
+           GET PUBLIC LOGO URL
+        ========================= */
+
+        const {
+          data: publicUrlData,
+        } = supabase.storage
+          .from("business-logos")
+          .getPublicUrl(filePath);
+
+        logoUrl = publicUrlData.publicUrl;
       }
 
       /* =========================
          CREATE BUSINESS PROFILE
          
-         UPSERT means:
-         Existing row → update
-         No row → create
+         UPSERT:
+         Existing row -> update
+         No row -> create
       ========================= */
 
       const {
         error: profileError,
-      } =
-        await supabase
-          .from("business_profiles")
-          .upsert(
-            {
-              user_id:
-                data.user.id,
+      } = await supabase
+        .from("business_profiles")
+        .upsert(
+          {
+            user_id: data.user.id,
+            business_name:
+              businessName.trim(),
+            address:
+              businessAddress.trim(),
+            social_handle:
+              socialHandle.trim() || null,
+            logo_url: logoUrl,
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
 
-              business_name:
-                businessName.trim(),
-
-              address:
-                businessAddress.trim(),
-
-              social_handle:
-                socialHandle.trim() ||
-                null,
-
-              logo_url:
-                logoUrl,
-            },
-            {
-              onConflict:
-                "user_id",
-            }
-          );
+      /* =========================
+         PROFILE ERROR
+      ========================= */
 
       if (profileError) {
         console.error(
@@ -390,8 +370,10 @@ export default function SignupPage() {
           profileError
         );
 
-        alert(
-          "Account was created, but your business profile could not be saved. Please check your Supabase business_profiles permissions."
+        showNotification(
+          "error",
+          "Profile setup failed",
+          "Your account was created, but your business profile could not be saved. Please check your Supabase business_profiles permissions."
         );
 
         return;
@@ -401,19 +383,21 @@ export default function SignupPage() {
          SUCCESS
       ========================= */
 
-      alert(
-        "Account created successfully!"
+      showNotification(
+        "success",
+        "Account created!",
+        "Your BizzBill account and business profile have been created successfully."
       );
-
-      router.push("/login");
     } catch (error) {
       console.error(
         "Unexpected signup error:",
         error
       );
 
-      alert(
-        "Something went wrong. Please try again."
+      showNotification(
+        "error",
+        "Something went wrong",
+        "We could not complete your registration. Please try again."
       );
     } finally {
       setLoading(false);
@@ -426,9 +410,7 @@ export default function SignupPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10">
-
       <div className="w-full max-w-lg">
-
         <div className="rounded-2xl bg-white p-6 shadow-lg sm:p-8">
 
           {/* =========================
@@ -436,7 +418,6 @@ export default function SignupPage() {
           ========================= */}
 
           <div className="mb-8 text-center">
-
             <h1 className="text-3xl font-bold text-gray-950 sm:text-4xl">
               Create your account
             </h1>
@@ -444,7 +425,6 @@ export default function SignupPage() {
             <p className="mt-2 text-base font-medium text-gray-700">
               Create your BizzBill account and set up your business profile.
             </p>
-
           </div>
 
           {/* =========================
@@ -461,7 +441,6 @@ export default function SignupPage() {
             ========================= */}
 
             <div>
-
               <label
                 htmlFor="name"
                 className="mb-2 block text-base font-semibold text-gray-950"
@@ -474,14 +453,11 @@ export default function SignupPage() {
                 type="text"
                 value={name}
                 onChange={(e) =>
-                  setName(
-                    e.target.value
-                  )
+                  setName(e.target.value)
                 }
                 placeholder="Enter your name"
                 className="w-full rounded-lg border border-gray-400 bg-white px-4 py-3 text-base font-semibold text-gray-950 outline-none placeholder:font-medium placeholder:text-gray-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
             {/* =========================
@@ -489,7 +465,6 @@ export default function SignupPage() {
             ========================= */}
 
             <div>
-
               <label
                 htmlFor="email"
                 className="mb-2 block text-base font-semibold text-gray-950"
@@ -502,14 +477,11 @@ export default function SignupPage() {
                 type="email"
                 value={email}
                 onChange={(e) =>
-                  setEmail(
-                    e.target.value
-                  )
+                  setEmail(e.target.value)
                 }
                 placeholder="Enter your email"
                 className="w-full rounded-lg border border-gray-400 bg-white px-4 py-3 text-base font-semibold text-gray-950 outline-none placeholder:font-medium placeholder:text-gray-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
             {/* =========================
@@ -517,7 +489,6 @@ export default function SignupPage() {
             ========================= */}
 
             <div>
-
               <label
                 htmlFor="password"
                 className="mb-2 block text-base font-semibold text-gray-950"
@@ -526,7 +497,6 @@ export default function SignupPage() {
               </label>
 
               <div className="relative">
-
                 <input
                   id="password"
                   type={
@@ -536,9 +506,7 @@ export default function SignupPage() {
                   }
                   value={password}
                   onChange={(e) =>
-                    setPassword(
-                      e.target.value
-                    )
+                    setPassword(e.target.value)
                   }
                   placeholder="Create a password"
                   className="w-full rounded-lg border border-gray-400 bg-white px-4 py-3 pr-12 text-base font-semibold text-gray-950 outline-none placeholder:font-medium placeholder:text-gray-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
@@ -570,13 +538,11 @@ export default function SignupPage() {
                     />
                   )}
                 </button>
-
               </div>
 
               <p className="mt-1 text-sm font-medium text-gray-700">
                 Password must be at least 6 characters.
               </p>
-
             </div>
 
             {/* =========================
@@ -594,7 +560,6 @@ export default function SignupPage() {
               ========================= */}
 
               <div className="mb-5">
-
                 <label className="mb-2 block text-base font-semibold text-gray-950">
                   Business logo
                 </label>
@@ -606,23 +571,16 @@ export default function SignupPage() {
                   <div className="flex flex-col items-center">
 
                     {logoPreview ? (
-
                       <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-
                         <img
                           src={logoPreview}
                           alt="Business logo preview"
                           className="h-full w-full object-contain p-3"
                         />
-
                       </div>
-
                     ) : (
-
                       <div className="flex h-32 w-32 items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-white">
-
                         <div className="text-center">
-
                           <div className="text-4xl">
                             🏢
                           </div>
@@ -630,11 +588,8 @@ export default function SignupPage() {
                           <p className="mt-2 text-xs font-bold text-gray-500">
                             No logo
                           </p>
-
                         </div>
-
                       </div>
-
                     )}
 
                     {/* FILE INPUT */}
@@ -643,9 +598,7 @@ export default function SignupPage() {
                       ref={fileInputRef}
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
-                      onChange={
-                        handleLogoChange
-                      }
+                      onChange={handleLogoChange}
                       className="hidden"
                     />
 
@@ -668,9 +621,7 @@ export default function SignupPage() {
                       {logoPreview && (
                         <button
                           type="button"
-                          onClick={
-                            handleRemoveLogo
-                          }
+                          onClick={handleRemoveLogo}
                           className="rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-extrabold text-red-600 transition hover:bg-red-50"
                         >
                           Remove Logo
@@ -688,9 +639,7 @@ export default function SignupPage() {
                     </p>
 
                   </div>
-
                 </div>
-
               </div>
 
               {/* =========================
@@ -698,7 +647,6 @@ export default function SignupPage() {
               ========================= */}
 
               <div className="mb-5">
-
                 <label
                   htmlFor="business-name"
                   className="mb-2 block text-base font-semibold text-gray-950"
@@ -718,7 +666,6 @@ export default function SignupPage() {
                   placeholder="Enter your business name"
                   className="w-full rounded-lg border border-gray-400 bg-white px-4 py-3 text-base font-semibold text-gray-950 outline-none placeholder:font-medium placeholder:text-gray-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
-
               </div>
 
               {/* =========================
@@ -726,7 +673,6 @@ export default function SignupPage() {
               ========================= */}
 
               <div className="mb-5">
-
                 <label
                   htmlFor="business-address"
                   className="mb-2 block text-base font-semibold text-gray-950"
@@ -746,7 +692,6 @@ export default function SignupPage() {
                   placeholder="Enter your business address"
                   className="w-full rounded-lg border border-gray-400 bg-white px-4 py-3 text-base font-semibold text-gray-950 outline-none placeholder:font-medium placeholder:text-gray-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
-
               </div>
 
               {/* =========================
@@ -754,7 +699,6 @@ export default function SignupPage() {
               ========================= */}
 
               <div>
-
                 <label
                   htmlFor="social-handle"
                   className="mb-2 block text-base font-semibold text-gray-950"
@@ -774,7 +718,6 @@ export default function SignupPage() {
                   placeholder="@yourbusiness"
                   className="w-full rounded-lg border border-gray-400 bg-white px-4 py-3 text-base font-semibold text-gray-950 outline-none placeholder:font-medium placeholder:text-gray-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
-
               </div>
 
             </div>
@@ -800,7 +743,6 @@ export default function SignupPage() {
           ========================= */}
 
           <p className="mt-6 text-center text-base font-medium text-gray-700">
-
             Already have an account?{" "}
 
             <button
@@ -812,13 +754,32 @@ export default function SignupPage() {
             >
               Log in
             </button>
-
           </p>
 
+          {/* =========================
+              NOTIFICATION MODAL
+          ========================= */}
+
+          <NotificationModal
+            open={notificationOpen}
+            type={notificationType}
+            title={notificationTitle}
+            message={notificationMessage}
+            buttonText="Continue"
+            onClose={() => {
+              setNotificationOpen(false);
+
+              if (
+                notificationType ===
+                "success"
+              ) {
+                router.push("/login");
+              }
+            }}
+          />
+
         </div>
-
       </div>
-
     </main>
   );
 }

@@ -1569,16 +1569,6 @@ export default function ReceiptPage() {
                 Items
               </h2>
 
-              <button
-                type="button"
-                onClick={
-                  addItem
-                }
-                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700"
-              >
-                + Add Item
-              </button>
-
             </div>
 
             <div className="space-y-4">
@@ -1733,6 +1723,16 @@ export default function ReceiptPage() {
 
                 )
               )}
+              <div className="mt-5 flex justify-end">
+  <button
+    type="button"
+    onClick={addItem}
+    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
+  >
+    + Add Item
+  </button>
+</div>
+
 
             </div>
 
