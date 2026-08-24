@@ -3,9 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type PaymentStatus = "Unpaid" | "Paid" | "Partially Paid";
+type PaymentStatus =
+  | "Unpaid"
+  | "Paid"
+  | "Partially Paid";
 
 type Item = {
   name: string;
@@ -20,15 +24,34 @@ type BusinessProfile = {
 
 export default function InvoicePage() {
   const supabase = createClient();
-  const invoiceRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
 
-  const [generated, setGenerated] = useState(false);
+  const invoiceRef =
+    useRef<HTMLDivElement>(null);
+
+  const documentId =
+    searchParams.get("id");
+
+  const isViewingDocument =
+    Boolean(documentId);
+
+  const [generated, setGenerated] =
+    useState(false);
+
+  const [documentLoading, setDocumentLoading] =
+    useState(false);
+
+  const [documentError, setDocumentError] =
+    useState("");
 
   /* =========================
      BUSINESS PROFILE
   ========================= */
 
-  const [businessProfile, setBusinessProfile] =
+  const [
+    businessProfile,
+    setBusinessProfile,
+  ] =
     useState<BusinessProfile | null>(null);
 
   const [profileLoading, setProfileLoading] =
@@ -69,74 +92,259 @@ export default function InvoicePage() {
   ========================= */
 
   useEffect(() => {
-    const getBusinessProfile = async () => {
+    const getBusinessProfile =
+      async () => {
+        try {
+          setProfileLoading(true);
+
+          const {
+            data: { user },
+            error: userError,
+          } =
+            await supabase.auth.getUser();
+
+          if (userError) {
+            console.error(
+              "User fetch error:",
+              userError
+            );
+            return;
+          }
+
+          if (!user) {
+            console.error(
+              "No logged-in user found."
+            );
+            return;
+          }
+
+          /*
+            When viewing a saved invoice,
+            the invoice itself contains the
+            business information that was saved
+            at the time of creation.
+
+            Therefore we don't need to load
+            another business profile here.
+          */
+
+          if (documentId) {
+            return;
+          }
+
+          const { data, error } =
+            await supabase
+              .from("business_profiles")
+              .select(
+                "business_name, address"
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .order(
+                "created_at",
+                {
+                  ascending: false,
+                }
+              )
+              .limit(1);
+
+          if (error) {
+            console.error(
+              "Business profile fetch error:",
+              error
+            );
+            return;
+          }
+
+          if (
+            data &&
+            data.length > 0
+          ) {
+            setBusinessProfile(
+              data[0]
+            );
+          } else {
+            console.log(
+              "No business profile found."
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Profile fetch error:",
+            error
+          );
+        } finally {
+          setProfileLoading(false);
+        }
+      };
+
+    getBusinessProfile();
+  }, [
+    supabase,
+    documentId,
+  ]);
+
+  /* =========================
+     LOAD SAVED INVOICE
+  ========================= */
+
+  useEffect(() => {
+    if (!documentId) {
+      return;
+    }
+
+    const loadInvoice = async () => {
       try {
-        setProfileLoading(true);
+        setDocumentLoading(true);
+        setDocumentError("");
 
         const {
           data: { user },
           error: userError,
-        } = await supabase.auth.getUser();
+        } =
+          await supabase.auth.getUser();
 
         if (userError) {
           console.error(
             "User fetch error:",
             userError
           );
+
+          setDocumentError(
+            "Unable to verify your account."
+          );
+
           return;
         }
 
         if (!user) {
-          console.error(
-            "No logged-in user found."
+          setDocumentError(
+            "You must be logged in to view this invoice."
           );
+
           return;
         }
 
-        /*
-          We intentionally do NOT use .single()
-          because your database currently has
-          more than one profile for this user.
-
-          We take the newest profile instead.
-        */
-
-        const { data, error } = await supabase
-          .from("business_profiles")
-          .select("business_name, address")
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("documents")
+          .select("*")
+          .eq("id", documentId)
           .eq("user_id", user.id)
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(1);
+          .eq(
+            "document_type",
+            "invoice"
+          )
+          .single();
 
         if (error) {
           console.error(
-            "Business profile fetch error:",
+            "Invoice fetch error:",
             error
           );
+
+          setDocumentError(
+            "Unable to load this invoice."
+          );
+
           return;
         }
 
-        if (data && data.length > 0) {
-          setBusinessProfile(data[0]);
-        } else {
-          console.log(
-            "No business profile found."
+        if (!data) {
+          setDocumentError(
+            "Invoice not found."
+          );
+
+          return;
+        }
+
+        /* =========================
+           LOAD SAVED DATA
+        ========================= */
+
+        setCustomerName(
+          data.customer_name || ""
+        );
+
+        setCustomerPhone(
+          data.customer_phone || ""
+        );
+
+        setInvoiceNumber(
+          data.document_number || ""
+        );
+
+        setInvoiceDate(
+          data.document_date || ""
+        );
+
+        setPaymentStatus(
+          (data.payment_status ||
+            "Unpaid") as PaymentStatus
+        );
+
+        setAmountPaid(
+          Number(
+            data.amount_paid || 0
+          )
+        );
+
+        /* =========================
+           LOAD ITEMS
+        ========================= */
+
+        if (
+          Array.isArray(data.items) &&
+          data.items.length > 0
+        ) {
+          setItems(
+            data.items as Item[]
           );
         }
+
+        /* =========================
+           LOAD SAVED BUSINESS INFO
+        ========================= */
+
+        setBusinessProfile({
+          business_name:
+            data.business_name ||
+            null,
+
+          address:
+            data.business_address ||
+            null,
+        });
+
+        /* =========================
+           SHOW INVOICE
+        ========================= */
+
+        setGenerated(true);
       } catch (error) {
         console.error(
-          "Profile fetch error:",
+          "Load invoice error:",
           error
         );
+
+        setDocumentError(
+          "Something went wrong while loading the invoice."
+        );
       } finally {
+        setDocumentLoading(false);
         setProfileLoading(false);
       }
     };
 
-    getBusinessProfile();
-  }, [supabase]);
+    loadInvoice();
+  }, [
+    documentId,
+    supabase,
+  ]);
 
   /* =========================
      ITEM FUNCTIONS
@@ -148,13 +356,14 @@ export default function InvoicePage() {
     value: string | number
   ) => {
     setItems((current) =>
-      current.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              [field]: value,
-            }
-          : item
+      current.map(
+        (item, i) =>
+          i === index
+            ? {
+                ...item,
+                [field]: value,
+              }
+            : item
       )
     );
   };
@@ -170,11 +379,17 @@ export default function InvoicePage() {
     ]);
   };
 
-  const removeItem = (index: number) => {
-    if (items.length === 1) return;
+  const removeItem = (
+    index: number
+  ) => {
+    if (items.length === 1) {
+      return;
+    }
 
     setItems((current) =>
-      current.filter((_, i) => i !== index)
+      current.filter(
+        (_, i) => i !== index
+      )
     );
   };
 
@@ -182,324 +397,453 @@ export default function InvoicePage() {
      CALCULATIONS
   ========================= */
 
-  const itemTotal = (item: Item) => {
+  const itemTotal = (
+    item: Item
+  ) => {
     return (
-      Number(item.quantity || 0) *
-      Number(item.unitPrice || 0)
+      Number(
+        item.quantity || 0
+      ) *
+      Number(
+        item.unitPrice || 0
+      )
     );
   };
 
-  const grandTotal = items.reduce(
-    (total, item) =>
-      total + itemTotal(item),
-    0
-  );
+  const grandTotal =
+    items.reduce(
+      (total, item) =>
+        total +
+        itemTotal(item),
+      0
+    );
 
   const balanceDue =
-    paymentStatus === "Partially Paid"
+    paymentStatus ===
+    "Partially Paid"
       ? Math.max(
-          grandTotal - amountPaid,
+          grandTotal -
+            amountPaid,
           0
         )
+      : paymentStatus ===
+        "Unpaid"
+      ? grandTotal
       : 0;
 
   /* =========================
      GENERATE INVOICE
   ========================= */
 
-  const generateInvoice = async () => {
-    /* =========================
-       BASIC VALIDATION
-    ========================= */
-
-    if (!businessProfile?.business_name?.trim()) {
-      alert(
-        "Please complete your business profile first."
-      );
-      return;
-    }
-
-    if (!customerName.trim()) {
-      alert("Please enter customer name.");
-      return;
-    }
-
-    if (!invoiceDate) {
-      alert("Please select invoice date.");
-      return;
-    }
-
-    if (
-      items.some(
-        (item) => !item.name.trim()
-      )
-    ) {
-      alert(
-        "Please enter a name for every item."
-      );
-      return;
-    }
-
-    if (
-      items.some(
-        (item) =>
-          item.quantity === "" ||
-          Number(item.quantity) <= 0
-      )
-    ) {
-      alert(
-        "Please enter a valid quantity for every item."
-      );
-      return;
-    }
-
-    try {
+  const generateInvoice =
+    async () => {
       /* =========================
-         GET CURRENT USER
+         BASIC VALIDATION
       ========================= */
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error(
-          "User fetch error:",
-          userError
-        );
-
+      if (
+        !businessProfile?.business_name?.trim()
+      ) {
         alert(
-          "Unable to verify your account. Please try again."
+          "Please complete your business profile first."
         );
 
         return;
       }
 
-      if (!user) {
+      if (
+        !customerName.trim()
+      ) {
         alert(
-          "You must be logged in to generate an invoice."
+          "Please enter customer name."
         );
 
         return;
       }
 
-      /* =========================
-         AUTOMATIC INVOICE NUMBER
-      ========================= */
-
-      const { data: generatedNumber, error: numberError } =
-        await supabase.rpc(
-          "get_next_invoice_number"
-        );
-
-      if (numberError) {
-        console.error(
-          "Invoice number generation error:",
-          numberError
-        );
-
+      if (!invoiceDate) {
         alert(
-          "Unable to generate invoice number. Please try again."
+          "Please select invoice date."
         );
 
         return;
       }
 
-      if (!generatedNumber) {
-        console.error(
-          "Invoice number was empty."
-        );
-
+      if (
+        items.some(
+          (item) =>
+            !item.name.trim()
+        )
+      ) {
         alert(
-          "Unable to generate invoice number. Please try again."
+          "Please enter a name for every item."
         );
 
         return;
       }
 
-      const newInvoiceNumber =
-        String(generatedNumber);
+      if (
+        items.some(
+          (item) =>
+            item.quantity ===
+              "" ||
+            Number(
+              item.quantity
+            ) <= 0
+        )
+      ) {
+        alert(
+          "Please enter a valid quantity for every item."
+        );
 
-      /* =========================
-         SET INVOICE NUMBER
-      ========================= */
+        return;
+      }
 
-      setInvoiceNumber(
-        newInvoiceNumber
-      );
+      try {
+        /* =========================
+           GET CURRENT USER
+        ========================= */
 
-      /* =========================
-         PAYMENT CALCULATIONS
-      ========================= */
+        const {
+          data: { user },
+          error: userError,
+        } =
+          await supabase.auth.getUser();
 
-      const savedAmountPaid =
-        paymentStatus === "Paid"
-          ? grandTotal
-          : paymentStatus ===
-            "Partially Paid"
-          ? amountPaid
-          : 0;
+        if (userError) {
+          console.error(
+            "User fetch error:",
+            userError
+          );
 
-      const savedBalanceDue =
-        paymentStatus === "Unpaid"
-          ? grandTotal
-          : paymentStatus ===
-            "Partially Paid"
-          ? Math.max(
-              grandTotal - amountPaid,
-              0
+          alert(
+            "Unable to verify your account. Please try again."
+          );
+
+          return;
+        }
+
+        if (!user) {
+          alert(
+            "You must be logged in to generate an invoice."
+          );
+
+          return;
+        }
+
+        /* =========================
+           AUTOMATIC INVOICE NUMBER
+        ========================= */
+
+        const {
+          data: generatedNumber,
+          error: numberError,
+        } =
+          await supabase.rpc(
+            "get_next_invoice_number"
+          );
+
+        if (numberError) {
+          console.error(
+            "Invoice number generation error:",
+            numberError
+          );
+
+          alert(
+            "Unable to generate invoice number. Please try again."
+          );
+
+          return;
+        }
+
+        if (!generatedNumber) {
+          console.error(
+            "Invoice number was empty."
+          );
+
+          alert(
+            "Unable to generate invoice number. Please try again."
+          );
+
+          return;
+        }
+
+        const newInvoiceNumber =
+          String(
+            generatedNumber
+          );
+
+        /* =========================
+           SET INVOICE NUMBER
+        ========================= */
+
+        setInvoiceNumber(
+          newInvoiceNumber
+        );
+
+        /* =========================
+           PAYMENT CALCULATIONS
+        ========================= */
+
+        const savedAmountPaid =
+          paymentStatus ===
+          "Paid"
+            ? grandTotal
+            : paymentStatus ===
+              "Partially Paid"
+            ? amountPaid
+            : 0;
+
+        const savedBalanceDue =
+          paymentStatus ===
+          "Unpaid"
+            ? grandTotal
+            : paymentStatus ===
+              "Partially Paid"
+            ? Math.max(
+                grandTotal -
+                  amountPaid,
+                0
+              )
+            : 0;
+
+        /* =========================
+           SAVE INVOICE
+        ========================= */
+
+        const {
+          error: insertError,
+        } =
+          await supabase
+            .from(
+              "documents"
             )
-          : 0;
+            .insert({
+              user_id:
+                user.id,
 
-      /* =========================
-         SAVE INVOICE
-      ========================= */
+              document_type:
+                "invoice",
 
-      const { error: insertError } =
-        await supabase
-          .from("documents")
-          .insert({
-            user_id: user.id,
+              document_number:
+                newInvoiceNumber,
 
-            document_type: "invoice",
+              customer_name:
+                customerName,
 
-            document_number:
-              newInvoiceNumber,
+              customer_phone:
+                customerPhone ||
+                null,
 
-            customer_name:
-              customerName,
+              document_date:
+                invoiceDate,
 
-            customer_phone:
-              customerPhone || null,
+              items: items,
 
-            document_date:
-              invoiceDate,
+              total_amount:
+                grandTotal,
 
-            items: items,
+              amount_paid:
+                savedAmountPaid,
 
-            total_amount:
-              grandTotal,
+              balance_due:
+                savedBalanceDue,
 
-            amount_paid:
-              savedAmountPaid,
+              payment_status:
+                paymentStatus,
 
-            balance_due:
-              savedBalanceDue,
+              payment_method:
+                null,
 
-            payment_status:
-              paymentStatus,
+              business_name:
+                businessProfile.business_name,
 
-            payment_method:
-              null,
+              business_address:
+                businessProfile.address,
+            });
 
-            business_name:
-              businessProfile.business_name,
+        if (insertError) {
+          console.error(
+            "Invoice save error:",
+            insertError
+          );
 
-            business_address:
-              businessProfile.address,
+          alert(
+            "Unable to save invoice. Please try again."
+          );
+
+          return;
+        }
+
+        /* =========================
+           SHOW GENERATED INVOICE
+        ========================= */
+
+        setGenerated(true);
+
+        setTimeout(() => {
+          window.scrollTo({
+            top: 0,
+            behavior: "smooth",
           });
-
-      if (insertError) {
+        }, 100);
+      } catch (error) {
         console.error(
-          "Invoice save error:",
-          insertError
+          "Invoice generation error:",
+          error
         );
 
         alert(
-          "Unable to save invoice. Please try again."
+          "Something went wrong while generating the invoice."
         );
-
-        return;
       }
-
-      /* =========================
-         SHOW GENERATED INVOICE
-      ========================= */
-
-      setGenerated(true);
-
-      setTimeout(() => {
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
-      }, 100);
-    } catch (error) {
-      console.error(
-        "Invoice generation error:",
-        error
-      );
-
-      alert(
-        "Something went wrong while generating the invoice."
-      );
-    }
-  };
+    };
 
   /* =========================
      SAVE AS PNG
   ========================= */
 
-  const saveAsImage = async () => {
-    if (!invoiceRef.current) return;
+  const saveAsImage =
+    async () => {
+      if (!invoiceRef.current) {
+        return;
+      }
 
-    const element = invoiceRef.current;
+      const element =
+        invoiceRef.current;
 
-    const originalWidth =
-      element.style.width;
+      const originalWidth =
+        element.style.width;
 
-    const originalMaxWidth =
-      element.style.maxWidth;
+      const originalMaxWidth =
+        element.style.maxWidth;
 
-    const originalMinWidth =
-      element.style.minWidth;
+      const originalMinWidth =
+        element.style.minWidth;
 
-    try {
-      element.style.width = "720px";
-      element.style.maxWidth = "720px";
-      element.style.minWidth = "720px";
+      try {
+        element.style.width =
+          "720px";
 
-      await new Promise((resolve) =>
-        setTimeout(resolve, 100)
-      );
+        element.style.maxWidth =
+          "720px";
 
-      const dataUrl = await toPng(element, {
-        width: 720,
-        height: element.scrollHeight,
-        pixelRatio: 2,
-        quality: 1,
-        backgroundColor: "#ffffff",
-        cacheBust: true,
-      });
+        element.style.minWidth =
+          "720px";
 
-      const link =
-        document.createElement("a");
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              100
+            )
+        );
 
-      link.download = `Invoice-${
-        invoiceNumber || "invoice"
-      }.png`;
+        const dataUrl =
+          await toPng(
+            element,
+            {
+              width: 720,
+              height:
+                element.scrollHeight,
+              pixelRatio: 2,
+              quality: 1,
+              backgroundColor:
+                "#ffffff",
+              cacheBust: true,
+            }
+          );
 
-      link.href = dataUrl;
+        const link =
+          document.createElement(
+            "a"
+          );
 
-      link.click();
-    } catch (error) {
-      console.error(error);
+        link.download = `Invoice-${
+          invoiceNumber ||
+          "invoice"
+        }.png`;
 
-      alert(
-        "Unable to save the invoice as an image. Please try again."
-      );
-    } finally {
-      element.style.width =
-        originalWidth;
+        link.href =
+          dataUrl;
 
-      element.style.maxWidth =
-        originalMaxWidth;
+        link.click();
+      } catch (error) {
+        console.error(
+          error
+        );
 
-      element.style.minWidth =
-        originalMinWidth;
-    }
-  };
+        alert(
+          "Unable to save the invoice as an image. Please try again."
+        );
+      } finally {
+        element.style.width =
+          originalWidth;
+
+        element.style.maxWidth =
+          originalMaxWidth;
+
+        element.style.minWidth =
+          originalMinWidth;
+      }
+    };
+
+  /* =========================
+     LOADING SAVED INVOICE
+  ========================= */
+
+  if (documentLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+
+        <div className="text-center">
+
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+
+          <p className="mt-4 text-sm font-semibold text-gray-600">
+            Loading invoice...
+          </p>
+
+        </div>
+
+      </main>
+    );
+  }
+
+  /* =========================
+     SAVED INVOICE ERROR
+  ========================= */
+
+  if (documentError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-sm">
+
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-2xl">
+            ⚠️
+          </div>
+
+          <h1 className="mt-4 text-xl font-extrabold text-gray-900">
+            Unable to load invoice
+          </h1>
+
+          <p className="mt-2 text-sm text-gray-500">
+            {documentError}
+          </p>
+
+          <Link
+            href="/documents"
+            className="mt-6 inline-block rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+          >
+            Back to Documents
+          </Link>
+
+        </div>
+
+      </main>
+    );
+  }
 
   /* =========================
      GENERATED INVOICE
@@ -542,25 +886,47 @@ export default function InvoicePage() {
           <div className="no-print mx-auto mb-5 flex w-full max-w-4xl items-center justify-between gap-3">
 
             <Link
-              href="/"
+              href={
+                isViewingDocument
+                  ? "/documents"
+                  : "/"
+              }
               className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-sm transition hover:bg-gray-50"
             >
-              ← Home
+              ←{" "}
+              {isViewingDocument
+                ? "Documents"
+                : "Home"}
             </Link>
 
             <button
               type="button"
-              onClick={() =>
-                setGenerated(false)
-              }
+              onClick={() => {
+                if (
+                  isViewingDocument
+                ) {
+                  window.location.href =
+                    "/invoice";
+
+                  return;
+                }
+
+                setGenerated(
+                  false
+                );
+              }}
               className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-50"
             >
-              Edit Invoice
+              {isViewingDocument
+                ? "Create New Invoice"
+                : "Edit Invoice"}
             </button>
 
           </div>
 
-          {/* INVOICE DOCUMENT */}
+          {/* =========================
+              INVOICE DOCUMENT
+          ========================= */}
 
           <div
             ref={invoiceRef}
@@ -568,7 +934,9 @@ export default function InvoicePage() {
             className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-gray-900 shadow-lg"
           >
 
-            {/* HEADER */}
+            {/* =========================
+                HEADER
+            ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
@@ -585,7 +953,9 @@ export default function InvoicePage() {
 
                   {businessProfile?.address && (
                     <p className="mt-2 max-w-md whitespace-pre-line break-words text-sm font-semibold leading-6 text-gray-700 sm:text-base">
-                      {businessProfile.address}
+                      {
+                        businessProfile.address
+                      }
                     </p>
                   )}
 
@@ -608,14 +978,18 @@ export default function InvoicePage() {
                     <p>
                       Invoice No:{" "}
                       <span className="font-extrabold text-gray-950">
-                        {invoiceNumber}
+                        {
+                          invoiceNumber
+                        }
                       </span>
                     </p>
 
                     <p>
                       Date:{" "}
                       <span className="font-extrabold text-gray-950">
-                        {invoiceDate}
+                        {
+                          invoiceDate
+                        }
                       </span>
                     </p>
 
@@ -627,7 +1001,9 @@ export default function InvoicePage() {
 
             </div>
 
-            {/* CUSTOMER + PAYMENT STATUS */}
+            {/* =========================
+                CUSTOMER + PAYMENT STATUS
+            ========================= */}
 
             <div className="grid grid-cols-1 gap-7 border-b border-gray-200 px-5 py-7 sm:grid-cols-2 sm:px-10 sm:py-9">
 
@@ -640,12 +1016,16 @@ export default function InvoicePage() {
                 </p>
 
                 <p className="mt-2 break-words text-xl font-extrabold text-gray-950 sm:text-2xl">
-                  {customerName}
+                  {
+                    customerName
+                  }
                 </p>
 
                 {customerPhone && (
                   <p className="mt-1 break-all text-sm font-semibold text-gray-800 sm:text-base">
-                    {customerPhone}
+                    {
+                      customerPhone
+                    }
                   </p>
                 )}
 
@@ -661,7 +1041,8 @@ export default function InvoicePage() {
 
                 <p
                   className={`mt-2 text-xl font-extrabold sm:text-2xl ${
-                    paymentStatus === "Paid"
+                    paymentStatus ===
+                    "Paid"
                       ? "text-green-600"
                       : paymentStatus ===
                         "Partially Paid"
@@ -669,14 +1050,18 @@ export default function InvoicePage() {
                       : "text-red-600"
                   }`}
                 >
-                  {paymentStatus}
+                  {
+                    paymentStatus
+                  }
                 </p>
 
               </div>
 
             </div>
 
-            {/* ITEMS */}
+            {/* =========================
+                ITEMS
+            ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
@@ -711,19 +1096,28 @@ export default function InvoicePage() {
                   <tbody>
 
                     {items.map(
-                      (item, index) => (
+                      (
+                        item,
+                        index
+                      ) => (
 
                         <tr
-                          key={index}
+                          key={
+                            index
+                          }
                           className="border-b border-gray-100"
                         >
 
                           <td className="break-words py-5 pr-2 text-left text-sm font-bold text-gray-950 sm:text-base">
-                            {item.name}
+                            {
+                              item.name
+                            }
                           </td>
 
                           <td className="py-5 text-center text-sm font-bold text-gray-950 sm:text-base">
-                            {item.quantity}
+                            {
+                              item.quantity
+                            }
                           </td>
 
                           <td className="whitespace-nowrap py-5 text-right text-sm font-semibold text-gray-950 sm:text-base">
@@ -757,7 +1151,9 @@ export default function InvoicePage() {
 
             </div>
 
-            {/* TOTALS */}
+            {/* =========================
+                TOTALS
+            ========================= */}
 
             <div className="border-b border-gray-200 px-5 py-7 sm:px-10 sm:py-9">
 
@@ -779,6 +1175,28 @@ export default function InvoicePage() {
                   </span>
 
                 </div>
+
+                {/* PAID AMOUNT */}
+
+                {paymentStatus ===
+                  "Paid" && (
+
+                  <div className="flex items-center justify-between gap-5">
+
+                    <span className="text-base font-bold text-gray-800 sm:text-lg">
+                      Amount Paid
+                    </span>
+
+                    <span className="whitespace-nowrap text-lg font-extrabold text-green-600 sm:text-xl">
+                      ₦
+                      {amountPaid.toLocaleString(
+                        "en-NG"
+                      )}
+                    </span>
+
+                  </div>
+
+                )}
 
                 {/* PARTIAL PAYMENT */}
 
@@ -819,11 +1237,35 @@ export default function InvoicePage() {
                   </>
                 )}
 
+                {/* UNPAID BALANCE */}
+
+                {paymentStatus ===
+                  "Unpaid" && (
+
+                  <div className="flex items-center justify-between gap-5 border-t border-gray-200 pt-5">
+
+                    <span className="text-base font-extrabold text-gray-800 sm:text-lg">
+                      Balance Due
+                    </span>
+
+                    <span className="whitespace-nowrap text-lg font-extrabold text-red-600 sm:text-xl">
+                      ₦
+                      {balanceDue.toLocaleString(
+                        "en-NG"
+                      )}
+                    </span>
+
+                  </div>
+
+                )}
+
               </div>
 
             </div>
 
-            {/* FOOTER */}
+            {/* =========================
+                FOOTER
+            ========================= */}
 
             <div className="px-5 py-7 text-center sm:px-10 sm:py-9">
 
@@ -839,13 +1281,17 @@ export default function InvoicePage() {
 
           </div>
 
-          {/* ACTION BUTTONS */}
+          {/* =========================
+              ACTION BUTTONS
+          ========================= */}
 
           <div className="no-print mx-auto mt-5 grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2">
 
             <button
               type="button"
-              onClick={saveAsImage}
+              onClick={
+                saveAsImage
+              }
               className="rounded-xl bg-blue-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition hover:bg-blue-700"
             >
               🖼 Save Invoice as PNG
@@ -917,13 +1363,17 @@ export default function InvoicePage() {
               <div className="mt-2">
 
                 <p className="text-xl font-extrabold text-gray-950">
-                  {businessProfile.business_name ||
-                    "Business name not set"}
+                  {
+                    businessProfile.business_name ||
+                    "Business name not set"
+                  }
                 </p>
 
                 {businessProfile.address && (
                   <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-gray-700">
-                    {businessProfile.address}
+                    {
+                      businessProfile.address
+                    }
                   </p>
                 )}
 
@@ -969,7 +1419,9 @@ export default function InvoicePage() {
 
               <input
                 type="text"
-                value={customerName}
+                value={
+                  customerName
+                }
                 onChange={(e) =>
                   setCustomerName(
                     e.target.value
@@ -991,7 +1443,9 @@ export default function InvoicePage() {
 
               <input
                 type="tel"
-                value={customerPhone}
+                value={
+                  customerPhone
+                }
                 onChange={(e) =>
                   setCustomerPhone(
                     e.target.value
@@ -1013,7 +1467,9 @@ export default function InvoicePage() {
 
               <input
                 type="date"
-                value={invoiceDate}
+                value={
+                  invoiceDate
+                }
                 onChange={(e) =>
                   setInvoiceDate(
                     e.target.value
@@ -1038,7 +1494,9 @@ export default function InvoicePage() {
 
               <button
                 type="button"
-                onClick={addItem}
+                onClick={
+                  addItem
+                }
                 className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700"
               >
                 + Add Item
@@ -1049,10 +1507,15 @@ export default function InvoicePage() {
             <div className="space-y-4">
 
               {items.map(
-                (item, index) => (
+                (
+                  item,
+                  index
+                ) => (
 
                   <div
-                    key={index}
+                    key={
+                      index
+                    }
                     className="rounded-2xl border border-gray-300 bg-gray-50 p-4"
                   >
 
@@ -1068,7 +1531,9 @@ export default function InvoicePage() {
 
                         <input
                           type="text"
-                          value={item.name}
+                          value={
+                            item.name
+                          }
                           onChange={(e) =>
                             updateItem(
                               index,
@@ -1093,18 +1558,24 @@ export default function InvoicePage() {
                         <input
                           type="number"
                           min="1"
-                          value={item.quantity}
+                          value={
+                            item.quantity
+                          }
                           onChange={(e) => {
 
                             const value =
-                              e.target.value;
+                              e.target
+                                .value;
 
                             updateItem(
                               index,
                               "quantity",
-                              value === ""
+                              value ===
+                                ""
                                 ? ""
-                                : Number(value)
+                                : Number(
+                                    value
+                                  )
                             );
 
                           }}
@@ -1126,7 +1597,8 @@ export default function InvoicePage() {
                           type="number"
                           min="0"
                           value={
-                            item.unitPrice || ""
+                            item.unitPrice ||
+                            ""
                           }
                           onChange={(e) =>
                             updateItem(
@@ -1134,7 +1606,8 @@ export default function InvoicePage() {
                               "unitPrice",
                               Math.max(
                                 Number(
-                                  e.target.value
+                                  e.target
+                                    .value
                                 ),
                                 0
                               )
@@ -1161,7 +1634,8 @@ export default function InvoicePage() {
                         )}
                       </p>
 
-                      {items.length > 1 && (
+                      {items.length >
+                        1 && (
                         <button
                           type="button"
                           onClick={() =>
@@ -1216,12 +1690,13 @@ export default function InvoicePage() {
             </label>
 
             <select
-              value={paymentStatus}
+              value={
+                paymentStatus
+              }
               onChange={(e) => {
 
                 const status =
-                  e.target
-                    .value as PaymentStatus;
+                  e.target.value as PaymentStatus;
 
                 setPaymentStatus(
                   status
@@ -1231,7 +1706,9 @@ export default function InvoicePage() {
                   status !==
                   "Partially Paid"
                 ) {
-                  setAmountPaid(0);
+                  setAmountPaid(
+                    0
+                  );
                 }
 
               }}
@@ -1268,15 +1745,19 @@ export default function InvoicePage() {
               <input
                 type="number"
                 min="0"
-                max={grandTotal}
+                max={
+                  grandTotal
+                }
                 value={
-                  amountPaid || ""
+                  amountPaid ||
+                  ""
                 }
                 onChange={(e) => {
 
                   const value =
                     Number(
-                      e.target.value
+                      e.target
+                        .value
                     );
 
                   setAmountPaid(
@@ -1317,7 +1798,9 @@ export default function InvoicePage() {
 
           <button
             type="button"
-            onClick={generateInvoice}
+            onClick={
+              generateInvoice
+            }
             className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-extrabold text-white shadow-sm transition hover:bg-blue-700"
           >
             Generate Invoice
