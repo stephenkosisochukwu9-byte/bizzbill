@@ -181,26 +181,74 @@ export default function InvoicePage() {
      GENERATE INVOICE
   ========================= */
 
-  const generateInvoice = () => {
-    if (!customerName.trim()) {
-      alert("Please enter customer name.");
+  const generateInvoice = async () => {
+  if (!customerName.trim()) {
+    alert("Please enter customer name.");
+    return;
+  }
+
+  if (!invoiceDate) {
+    alert("Please select invoice date.");
+    return;
+  }
+
+  if (items.some((item) => !item.name.trim())) {
+    alert("Please enter a name for every item.");
+    return;
+  }
+
+  if (
+    items.some(
+      (item) =>
+        item.quantity === "" ||
+        Number(item.quantity) <= 0
+    )
+  ) {
+    alert("Please enter a valid quantity for every item.");
+    return;
+  }
+
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      alert("You must be logged in to generate an invoice.");
       return;
     }
 
-    if (!invoiceNumber.trim()) {
-      alert("Please enter invoice number.");
+    /*
+      Ask Supabase to generate the next
+      invoice number for this user.
+    */
+    const { data, error } = await supabase.rpc(
+      "get_next_invoice_number"
+    );
+
+    if (error) {
+      console.error(
+        "Invoice number generation error:",
+        error
+      );
+
+      alert(
+        "Unable to generate invoice number. Please try again."
+      );
+
       return;
     }
 
-    if (!invoiceDate) {
-      alert("Please select invoice date.");
+    if (!data) {
+      alert(
+        "Invoice number could not be generated. Please try again."
+      );
+
       return;
     }
 
-    if (items.some((item) => !item.name.trim())) {
-      alert("Please enter a name for every item.");
-      return;
-    }
+    setInvoiceNumber(data);
 
     setGenerated(true);
 
@@ -210,7 +258,20 @@ export default function InvoicePage() {
         behavior: "smooth",
       });
     }, 100);
-  };
+
+  } catch (error) {
+    console.error(
+      "Generate invoice error:",
+      error
+    );
+
+    alert(
+      "Something went wrong while generating the invoice."
+    );
+  }
+};
+
+
 
   /* =========================
      SAVE AS PNG
@@ -765,26 +826,7 @@ export default function InvoicePage() {
 
             </div>
 
-            {/* INVOICE NUMBER */}
-
-            <div>
-
-              <label className="mb-2 block text-sm font-extrabold text-gray-900">
-                Invoice number
-              </label>
-
-              <input
-                type="text"
-                value={invoiceNumber}
-                onChange={(e) =>
-                  setInvoiceNumber(e.target.value)
-                }
-                placeholder="Invoice number"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-950 placeholder:text-gray-700 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
+           
             {/* INVOICE DATE */}
 
             <div>
